@@ -1,0 +1,154 @@
+#!/bin/bash
+
+# save-them-all: save the windows of the active workspace (order, launch
+# command and geometry) so restore-them-all can bring them back later.
+#
+# Usage: save-them-all [--quiet]
+# State: ~/.local/state/save-them-all/workspace-<id>.json (hand-editable)
+
+set -euo pipefail
+
+STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
+APPS_DIRS=("$HOME/.local/share/applications" /usr/share/applications)
+EXCLUDE_CLASSES='^(org\.omarchy\.screensaver|)$'
+QUIET=0
+
+usage() {
+  cat <<USAGE
+Usage: save-them-all [--quiet]
+
+Saves every window of the active Hyprland workspace: its launch command, its
+position and its size. Restore them later with restore-them-all.
+
+Options:
+  --quiet      Do not send a desktop notification.
+  -h, --help   Show this help.
+
+Environment:
+  SAVE_THEM_ALL_STATE   State directory (default ~/.local/state/save-them-all).
+USAGE
+}
+
+case "${1:-}" in
+  --quiet) QUIET=1 ;;
+  -h | --help) usage; exit 0 ;;
+  "") ;;
+  *) echo "save-them-all: unknown option: $1" >&2; usage >&2; exit 1 ;;
+esac
+
+notify() {
+  omarchy-notification-send -g 󱂬 "$1" "${2:-}" >/dev/null 2>&1 || true
+}
+
+has_tag() { # $1 window json, $2 tag (without the trailing *)
+  jq -e --arg t "$2" '[.tags[]? | sub("\\*$"; "")] | index($t) != null' <<<"$1" >/dev/null
+}
+
+# https://host/path?x -> chrome-host__path-Default (how Chromium names webapps)
+url_class() {
+  local u=${1#*://} host path=""
+  u=${u%%\?*}
+  u=${u%%#*}
+  host=${u%%/*}
+  [[ $u == */* ]] && path=${u#*/}
+  printf 'chrome-%s__%s-Default' "$host" "${path//\//_}"
+}
+
+# Find the .desktop file whose URL produces this class; fall back to
+# rebuilding the URL out of the class itself.
+webapp_cmd() {
+  local cls=$1 f exec_line url body host path
+  for d in "${APPS_DIRS[@]}"; do for f in "$d"/*.desktop; do
+    [[ -f $f ]] || continue
+    exec_line=$(grep -m1 '^Exec=omarchy-launch-webapp' "$f" 2>/dev/null) || continue
+    url=$(sed -E 's/^Exec=omarchy-launch-webapp +"?([^" ]+)"?.*$/\1/' <<<"$exec_line")
+    if [[ $(url_class "$url") == "$cls" ]]; then
+      printf '%s' "${exec_line#Exec=}"
+      return 0
+    fi
+  done; done
+  body=${cls#chrome-}
+  body=${body%-Default}
+  host=${body%%__*}
+  path=${body#*__}
+  printf 'omarchy-launch-webapp "https://%s/%s"' "$host" "${path//_/\/}"
+}
+
+terminal_cmd() { # $1 pid
+  local tree
+  tree=$(pstree -A "$1" 2>/dev/null || true)
+  if grep -q 'herdr' <<<"$tree"; then
+    echo "omarchy-launch-terminal herdr"
+  elif grep -q 'tmux' <<<"$tree"; then
+    echo "omarchy-launch-terminal-tmux"
+  else
+    echo "omarchy-launch-terminal"
+  fi
+}
+
+# The process's real command line. Electron/Chromium sometimes expose a
+# SINGLE token with spaces in it: if that token is not a file on disk, split
+# it back on spaces.
+proc_cmd() { # $1 pid
+  local -a argv
+  mapfile -d '' -t argv <"/proc/$1/cmdline" 2>/dev/null || return 1
+  ((${#argv[@]})) || return 1
+  if ((${#argv[@]} == 1)) && [[ ${argv[0]} == *" "* && ! -e ${argv[0]} ]]; then
+    read -r -a argv <<<"${argv[0]}"
+  fi
+  printf 'uwsm-app -- %s' "$(printf '%q ' "${argv[@]}" | sed 's/ $//')"
+}
+
+launch_cmd() { # $1 window json
+  local w=$1 cls pid
+  cls=$(jq -r .class <<<"$w")
+  pid=$(jq -r .pid <<<"$w")
+  if [[ $cls == chrome-*-Default ]]; then
+    webapp_cmd "$cls"
+  elif has_tag "$w" chromium-based-browser || [[ $cls =~ ^(firefox|zen|librewolf)$ ]]; then
+    echo "omarchy-launch-browser"
+  elif has_tag "$w" terminal; then
+    terminal_cmd "$pid"
+  else
+    proc_cmd "$pid"
+  fi
+}
+
+ws=$(hyprctl -j activeworkspace | jq -r '.id')
+monitor=$(hyprctl -j activeworkspace | jq -r '.monitor')
+# Order = left to right, top to bottom: this is what reproduces the dwindle tree.
+clients=$(hyprctl -j clients | jq -c --argjson ws "$ws" --arg ex "$EXCLUDE_CLASSES" \
+  '[.[] | select(.workspace.id == $ws and .mapped and ((.hidden // false) | not) and ((.class // "") | test($ex) | not))]
+   | sort_by(.at[0], .at[1]) | .[]')
+
+entries='[]'
+lines=()
+while IFS= read -r w; do
+  [[ -n $w ]] || continue
+  cls=$(jq -r .class <<<"$w")
+  if ! cmd=$(launch_cmd "$w"); then
+    echo "no launch command for $cls, skipping" >&2
+    continue
+  fi
+  entry=$(jq -c --arg cmd "$cmd" '{class, title: (.title // ""), cmd: $cmd, at, size, floating}' <<<"$w")
+  entries=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$entries")
+  lines+=("$(jq -r '"\(.size[0])x\(.size[1]) @\(.at[0]),\(.at[1])  \(.class)  ->  \(.cmd)"' <<<"$entry")")
+done <<<"$clients"
+
+n=$(jq length <<<"$entries")
+if ((n == 0)); then
+  notify "Nothing to save" "No windows on workspace $ws"
+  echo "No windows on workspace $ws" >&2
+  exit 1
+fi
+
+mkdir -p "$STATE_DIR"
+out="$STATE_DIR/workspace-$ws.json"
+tmp=$(mktemp "$STATE_DIR/.save.XXXXXX")
+jq -n --argjson ws "$ws" --arg monitor "$monitor" --arg saved_at "$(date -Is)" --argjson windows "$entries" \
+  '{workspace: $ws, monitor: $monitor, saved_at: $saved_at, windows: $windows}' >"$tmp"
+mv "$tmp" "$out"
+
+printf '%s\n' "${lines[@]}"
+echo "Saved: $out"
+((QUIET)) || notify "Saved $n windows from workspace $ws" "$(printf '%s\n' "${lines[@]}" | awk '{print $3}' | paste -sd ', ')"

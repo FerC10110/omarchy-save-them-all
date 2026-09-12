@@ -1,0 +1,284 @@
+#!/bin/bash
+
+# restore-them-all: reopen on the active workspace the windows saved by
+# save-them-all, rebuild the dwindle tree and restore the geometry.
+#
+# Usage: restore-them-all [--quiet]
+
+set -euo pipefail
+
+STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
+TIMEOUT="${SAVE_THEM_ALL_TIMEOUT:-25}"
+PARKING="special:savethemall"   # hidden workspace where windows wait while the tree is rebuilt
+QUIET=0
+
+usage() {
+  cat <<USAGE
+Usage: restore-them-all [--quiet]
+
+Reopens the windows saved by save-them-all for the active Hyprland workspace,
+rebuilds the dwindle split tree and restores each window's size and position.
+Windows that are already open are reused instead of being launched twice.
+
+Options:
+  --quiet      Do not send a desktop notification.
+  -h, --help   Show this help.
+
+Environment:
+  SAVE_THEM_ALL_STATE     State directory (default ~/.local/state/save-them-all).
+  SAVE_THEM_ALL_TIMEOUT   Seconds to wait for each window (default 25).
+USAGE
+}
+
+case "${1:-}" in
+  --quiet) QUIET=1 ;;
+  -h | --help) usage; exit 0 ;;
+  "") ;;
+  *) echo "restore-them-all: unknown option: $1" >&2; usage >&2; exit 1 ;;
+esac
+
+notify() {
+  omarchy-notification-send -g 󱂬 "$1" "${2:-}" >/dev/null 2>&1 || true
+}
+
+dispatch() {
+  hyprctl dispatch "$1" >/dev/null
+}
+
+ws=$(hyprctl -j activeworkspace | jq -r '.id')
+file="$STATE_DIR/workspace-$ws.json"
+if [[ ! -f $file ]]; then
+  notify "Nothing saved for workspace $ws" "Run 'Save them all' first"
+  echo "No such file: $file" >&2
+  exit 1
+fi
+active_before=$(hyprctl -j activewindow | jq -r '.address // empty')
+
+clients_on_ws() {
+  hyprctl -j clients | jq -c --argjson ws "$ws" '[.[] | select(.workspace.id == $ws and .mapped)]'
+}
+
+addresses_of() { # $1 class -> addresses sorted by position
+  clients_on_ws | jq -r --arg c "$1" '[.[] | select(.class == $c)] | sort_by(.at[0], .at[1]) | .[].address'
+}
+
+# Wait for a window of this class whose address was not there before. Prints the address.
+wait_new_window() { # $1 class, $2 previous addresses (one per line)
+  local deadline=$((SECONDS + TIMEOUT)) a
+  while ((SECONDS < deadline)); do
+    while IFS= read -r a; do
+      [[ -n $a ]] || continue
+      grep -qx "$a" <<<"$2" || { echo "$a"; return 0; }
+    done < <(addresses_of "$1")
+    sleep 0.2
+  done
+  return 1
+}
+
+# Wait until the window count stops changing (Chrome restores its own windows in waves).
+wait_settled() {
+  local last=-1 n stable=0 deadline=$((SECONDS + 15))
+  while ((SECONDS < deadline)); do
+    n=$(hyprctl -j clients | jq length)
+    if ((n == last)); then ((++stable >= 6)) && return 0; else stable=0; fi
+    last=$n
+    sleep 0.5
+  done
+}
+
+dim() { # $1 address, $2 x|y
+  local i=0
+  [[ $2 == y ]] && i=1
+  hyprctl -j clients | jq -r --arg a "$1" --argjson i "$i" '.[] | select(.address == $a) | .size[$i]'
+}
+
+# Walk a tiled window's dimension to the target with relative resizes, reading
+# back the real size ("exact" resize is not reliable while tiled).
+fit() { # $1 address, $2 x|y, $3 target
+  local addr=$1 axis=$2 target=$3 cur next delta sign=1 tries=0 dx dy
+  cur=$(dim "$addr" "$axis")
+  [[ $cur =~ ^[0-9]+$ ]] || return 0
+  while ((tries++ < 8)); do
+    delta=$((target - cur))
+    ((delta > -3 && delta < 3)) && return 0
+    dx=0; dy=0
+    if [[ $axis == x ]]; then dx=$((delta * sign)); else dy=$((delta * sign)); fi
+    dispatch "hl.dsp.window.resize({ window = 'address:$addr', x = $dx, y = $dy, relative = true })"
+    sleep 0.15
+    next=$(dim "$addr" "$axis")
+    if ((next == cur)); then
+      sign=$((-sign))          # no effect: try the other direction
+      ((tries > 2)) && return 0
+      continue
+    fi
+    (((next - cur) * delta < 0)) && sign=$((-sign))   # moved away: flip
+    cur=$next
+  done
+}
+
+place_floating() { # $1 address, $2 w, $3 h, $4 x, $5 y  (verified order: float, resize, move)
+  dispatch "hl.dsp.window.float({ window = 'address:$1', state = 'on' })"
+  sleep 0.1
+  dispatch "hl.dsp.window.resize({ window = 'address:$1', x = $2, y = $3, exact = true })"
+  sleep 0.1
+  dispatch "hl.dsp.window.move({ window = 'address:$1', x = $4, y = $5, exact = true })"
+}
+
+park() { # $1 address -> to the hidden workspace
+  dispatch "hl.dsp.window.move({ window = 'address:$1', workspace = '$PARKING', follow = false })"
+}
+
+# Put a window back on the workspace. With $2/$3 it lands next to another window ($3 = r|d).
+unpark() { # $1 address, [$2 neighbour address, $3 side]
+  if [[ -n ${2:-} ]]; then
+    dispatch "hl.dsp.focus({ window = 'address:$2' })"
+    dispatch "hl.dsp.layout('preselect $3')"
+  fi
+  dispatch "hl.dsp.window.move({ window = 'address:$1', workspace = '$ws', follow = false })"
+  sleep 0.25
+}
+
+# Derive the guillotine split tree from the saved rectangles and return the
+# insertion plan: the seed window first, then each window next to one already placed.
+# A vertical cut (line x=c) leaves windows side by side -> preselect r;
+# a horizontal cut (line y=c) leaves them stacked -> preselect d.
+build_plan() { # $1: [{i, x, y, w, h}]
+  python3 - "$1" <<'PY'
+import json, sys
+rects = json.loads(sys.argv[1])
+
+def split(rs):
+    if len(rs) == 1:
+        return ("leaf", rs[0]["i"])
+    for c in sorted({r["x"] + r["w"] for r in rs}):
+        left = [r for r in rs if r["x"] + r["w"] <= c]
+        right = [r for r in rs if r["x"] >= c]
+        if left and right and len(left) + len(right) == len(rs):
+            return ("r", split(left), split(right))
+    for c in sorted({r["y"] + r["h"] for r in rs}):
+        top = [r for r in rs if r["y"] + r["h"] <= c]
+        bottom = [r for r in rs if r["y"] >= c]
+        if top and bottom and len(top) + len(bottom) == len(rs):
+            return ("d", split(top), split(bottom))
+    return ("r", ("leaf", rs[0]["i"]), split(rs[1:]))   # no clean cut: chain them
+
+def seed(n):
+    return n[1] if n[0] == "leaf" else seed(n[1])
+
+steps = []
+def realize(n):
+    if n[0] == "leaf":
+        return
+    steps.append({"op": "insert", "i": seed(n[2]), "next_to": seed(n[1]), "dir": n[0]})
+    realize(n[1])
+    realize(n[2])
+
+root = split(rects)
+steps.append({"op": "seed", "i": seed(root)})
+realize(root)
+print(json.dumps(steps))
+PY
+}
+
+# ---------- 1. Open whatever is missing ----------
+mapfile -t entries < <(jq -c '.windows[]' "$file")
+declare -A used=()
+declare -a addrs=()
+opened=0
+skipped=0
+missing=()
+
+for i in "${!entries[@]}"; do
+  e=${entries[$i]}
+  cls=$(jq -r .class <<<"$e")
+  cmd=$(jq -r .cmd <<<"$e")
+  need=$(( ${used[$cls]:-0} + 1 ))
+  mapfile -t existing < <(addresses_of "$cls")
+  if ((${#existing[@]} >= need)); then
+    addrs[$i]=${existing[$((need - 1))]}
+    used[$cls]=$need
+    ((++skipped))
+    echo "already open: $cls"
+    continue
+  fi
+  before=$(printf '%s\n' "${existing[@]}")
+  echo "opening: $cls  ($cmd)"
+  setsid -f bash -c "$cmd" >/dev/null 2>&1
+  if addr=$(wait_new_window "$cls" "$before"); then
+    sleep 1   # grace period: an app that fails to start maps a window and closes it right away
+    if ! addresses_of "$cls" | grep -qx "$addr"; then
+      echo "closed itself: $cls" >&2
+      missing+=("$cls (closed itself)")
+      continue
+    fi
+    addrs[$i]=$addr
+    used[$cls]=$need
+    ((++opened))
+    [[ $cmd == omarchy-launch-browser* ]] && wait_settled
+  else
+    echo "never appeared: $cls" >&2
+    missing+=("$cls")
+  fi
+done
+
+# ---------- 2. Rebuild the dwindle tree ----------
+tiled='[]'
+for i in "${!entries[@]}"; do
+  [[ -n ${addrs[$i]:-} ]] || continue
+  [[ $(jq -r .floating <<<"${entries[$i]}") == true ]] && continue
+  tiled=$(jq -c --argjson i "$i" --argjson e "${entries[$i]}" \
+    '. + [{i: $i, x: $e.at[0], y: $e.at[1], w: $e.size[0], h: $e.size[1]}]' <<<"$tiled")
+done
+
+if (( $(jq length <<<"$tiled") > 1 )); then
+  plan=$(build_plan "$tiled")
+  managed=$(printf '%s\n' "${addrs[@]}")
+  extras=()
+  # Park every tiled window on the workspace, including the ones that were not saved.
+  while IFS=$'\t' read -r a fl; do
+    [[ $fl == true ]] && continue
+    grep -qx "$a" <<<"$managed" || extras+=("$a")
+    park "$a"
+  done < <(clients_on_ws | jq -r '.[] | [.address, (.floating|tostring)] | @tsv')
+  sleep 0.3
+  last=""
+  while IFS= read -r step; do
+    i=$(jq -r .i <<<"$step")
+    if [[ $(jq -r .op <<<"$step") == insert ]]; then
+      unpark "${addrs[$i]}" "${addrs[$(jq -r .next_to <<<"$step")]}" "$(jq -r .dir <<<"$step")"
+    else
+      unpark "${addrs[$i]}"
+    fi
+    last=${addrs[$i]}
+  done < <(jq -c '.[]' <<<"$plan")
+  for a in "${extras[@]}"; do   # unsaved windows come back last, to the right of the last one
+    unpark "$a" "$last" r
+    last=$a
+  done
+fi
+
+# ---------- 3. Geometry ----------
+for i in "${!entries[@]}"; do
+  [[ -n ${addrs[$i]:-} ]] || continue
+  read -r fl w h x y < <(jq -r '"\(.floating) \(.size[0]) \(.size[1]) \(.at[0]) \(.at[1])"' <<<"${entries[$i]}")
+  if [[ $fl == true ]]; then
+    place_floating "${addrs[$i]}" "$w" "$h" "$x" "$y"
+  else
+    fit "${addrs[$i]}" x "$w"
+    fit "${addrs[$i]}" y "$h"
+  fi
+done
+
+# Give focus back to where it was, if that window is still on the workspace.
+if [[ -n $active_before ]] && clients_on_ws | jq -e --arg a "$active_before" 'any(.[]; .address == $a)' >/dev/null; then
+  dispatch "hl.dsp.focus({ window = 'address:$active_before' })"
+fi
+
+summary="$opened opened, $skipped already there"
+if ((${#missing[@]})); then
+  notify "Windows: ${#missing[@]} missing" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')"
+  echo "$summary; missing: ${missing[*]}" >&2
+  exit 1
+fi
+echo "$summary"
+((QUIET)) || notify "Windows restored on workspace $ws" "$summary"
