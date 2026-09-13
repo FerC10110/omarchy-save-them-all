@@ -3,6 +3,8 @@
 Save the window layout of a Hyprland workspace and bring it back exactly: the
 same apps, the same splits, the same sizes.
 
+![The Save Them All panel](preview.png)
+
 Omarchy restores your session, not your arrangement. You reopen the browser,
 the terminal and three chart webapps, then spend a minute dragging them back
 into the shape you actually work in. Save Them All records that shape once and
