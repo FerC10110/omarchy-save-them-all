@@ -119,6 +119,9 @@ on `jq`, `python3` and `pstree`, all of which ship with Omarchy.
   session restore to settle first.
 - **Apps are matched by window class and count.** Two windows of the same app
   are told apart by their position in the saved order, not by their content.
+- **A terminal comes back as a terminal.** It reopens through Omarchy's own
+  launcher so a `herdr` or `tmux` session is picked up again, which also means
+  a terminal that was running something else starts empty.
 
 ## Remove
 

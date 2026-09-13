@@ -62,12 +62,16 @@ Panel {
     return url.indexOf("file://") === 0 ? decodeURIComponent(url.substring(7)) : url
   }
 
-  // Chromium names a webapp window after its URL: chrome-host__some_path-Default.
-  // The host alone is what a person recognises in a list.
+  // Window classes are addresses, not names. Chromium names a webapp window
+  // after its URL (chrome-host__some_path-Default), where the host is the part
+  // a person recognises; a reverse-DNS class (org.gnome.Nautilus) carries its
+  // name in the last segment. Anything else is already as readable as it gets.
   function prettyClass(cls) {
     var name = String(cls || "")
     var webapp = name.match(/^chrome-([^_]+)__.*-Default$/)
     if (webapp) return webapp[1]
+    var parts = name.split(".")
+    if (parts.length >= 3 && parts[parts.length - 1] !== "") return parts[parts.length - 1]
     return name
   }
 
