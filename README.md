@@ -50,23 +50,93 @@ It runs once per session. Restarting the shell, or the plugin reloading, does no
 restore again and does not reshuffle windows you have moved since. Saving a
 workspace again keeps its switch as it was.
 
+### Close the browser cleanly
+
+This is the one switch that reaches outside the plugin's own files, so it starts
+off, and it is worth knowing what it does before you turn it on.
+
+**Why it exists.** Omarchy's Logout, Reboot and Shutdown do not tell running apps
+that the session is ending. They close every window one at a time, and the
+session ends a couple of seconds later. For Chromium that is an abrupt ending,
+and it costs the browser its tabs in one of two ways:
+
+- To Chromium, windows closed one by one look exactly like you closing them by
+  hand, so each one is dropped from the session. At best the next start brings
+  back only the last window that was closed.
+- If the session ends while Chromium is still shutting down, it is cut off
+  halfway and records the exit as a crash. After a crash Chromium never restores
+  by itself, even with *Continue where you left off* turned on: it opens an
+  empty window and waits for you to click **Restore**.
+
+That undoes the login restore as well. The plugin starts the browser first and
+waits for it to bring its tabs back, but there is nothing to bring back. Clicking
+**Restore** afterwards drops the tabs into a layout that was already arranged
+and pushes it around, and reopening them from the history also reopens the
+webapps the plugin already opened, so they show up twice.
+
+Chromium keeps its whole session when it is asked to quit as a whole, which is
+what **⋮ → Exit** does. It then comes back with every tab on the next start, and
+the plugin only has to open the webapps, which Chromium never restores itself.
+
+**What the switch does.** **Close the browser cleanly**, under *Leaving the
+session*, makes Logout, Reboot and Shutdown in the Omarchy menu do that first:
+they ask the browser to quit, wait up to ten seconds for it to finish saving, and
+then run Omarchy's own command, which finds no browser windows left to close.
+
+To get there it adds these lines to
+`~/.config/omarchy/extensions/omarchy-menu.jsonc`, the file Omarchy gives you for
+customizing its menu:
+
+```jsonc
+// >>> Save Them All: close the browser cleanly before Logout, Reboot and Shutdown,
+// so it brings its tabs back. Added by the plugin's panel; turn the switch off
+// there to remove these lines. Without the plugin they run Omarchy's own command.
+"system.logout": {"icon": "󰍃", "label": "Logout", "action": "p=$HOME/.config/omarchy/plugins/io.github.ferc10110.save-them-all/bin/close-browser-at-logout; [ -x \"$p\" ] && exec \"$p\" omarchy-system-logout; exec omarchy-system-logout"},
+"system.reboot": {"icon": "󰜉", "label": "Reboot", "action": "p=$HOME/.config/omarchy/plugins/io.github.ferc10110.save-them-all/bin/close-browser-at-logout; [ -x \"$p\" ] && exec \"$p\" omarchy-system-reboot; exec omarchy-system-reboot"},
+"system.shutdown": {"icon": "󰐥", "label": "Shutdown", "action": "p=$HOME/.config/omarchy/plugins/io.github.ferc10110.save-them-all/bin/close-browser-at-logout; [ -x \"$p\" ] && exec \"$p\" omarchy-system-shutdown; exec omarchy-system-shutdown"},
+// <<< Save Them All
+```
+
+- **Only the action changes.** The entries keep Omarchy's own icons and labels,
+  and the command at the end of each line is the one Omarchy runs by default.
+- **Nothing else is touched.** No Omarchy files, no other config, nothing that
+  runs outside those three menu entries.
+- **Removing the plugin cannot break them.** Each line checks that the plugin's
+  script is still there and otherwise runs Omarchy's command directly.
+- **Turning the switch off takes the lines out again** and leaves the rest of
+  the file exactly as it was.
+- **Your own changes win.** If your menu file already customizes Logout, Reboot
+  or Shutdown, the switch stays off and says so instead of overriding them.
+
+It closes Chromium and, going by their process names, the browsers built on it:
+Google Chrome, Brave, Vivaldi and Edge. It has been tested with Chromium only.
+Firefox is left alone. Only the menu entries change, so
+`omarchy system reboot` in a terminal, or a keybinding that runs those commands
+directly, still closes windows the old way; put `close-browser-at-logout` in
+front of them there, as shown below.
+
 ### From the menu, a keybinding or the terminal
 
 The scripts are plain bash and work on their own. Put them on your `PATH`:
 
 ```sh
-for s in save-them-all restore-them-all restore-them-all-at-login; do
+for s in save-them-all restore-them-all restore-them-all-at-login close-browser-at-logout; do
   ln -s ~/.config/omarchy/plugins/io.github.ferc10110.save-them-all/bin/$s ~/.local/bin/
 done
 ```
 
-`restore-them-all --workspace 3` restores workspace 3 from anywhere. The login
+`restore-them-all --workspace 3` restores workspace 3 from anywhere. The panel's
 switches are available too:
 
 ```sh
 restore-them-all-at-login --list        # every saved workspace and its switch, as JSON
 restore-them-all-at-login --enable 3    # restore workspace 3 at login
 restore-them-all-at-login --disable 3
+
+close-browser-at-logout --status        # whether the menu entries are in place, as JSON
+close-browser-at-logout --enable        # add them
+close-browser-at-logout --disable       # take them out
+close-browser-at-logout omarchy-system-reboot   # quit the browser cleanly, then reboot
 ```
 
 A keybinding in `~/.config/hypr/bindings.lua`:
@@ -122,6 +192,24 @@ the Hyprland instance in `$XDG_RUNTIME_DIR/save-them-all/`. That directory is
 private to your user and emptied when the session ends, so the marker means
 "this session has been restored" and nothing more.
 
+`close-browser-at-logout` sends the browser process the same quit signal an
+orderly system shutdown sends, and Chromium handles it like **Exit**: every
+window closes at once and the session is written whole. Only the browser process
+itself gets it, not the renderer and GPU processes Chromium runs next to it,
+which it takes down on its own. The script waits for that process to exit, then
+hands over to the command it was given.
+
+Chromium also has a `--restore-last-session` flag, which looks like a simpler
+way to get the tabs back at login. It is no help here: Chromium deliberately
+ignores it after a crash, so that a page that brought the browser down cannot
+bring it down again on every start. The session has to end cleanly in the first
+place, which is why the fix sits in front of Logout, Reboot and Shutdown.
+
+The menu file is JSONC and yours, comments included, so the switch edits it as
+text: its lines sit between the two marker comments and are added or removed
+whole. Every write is checked to still parse the way the Omarchy menu reads it
+before it replaces the file.
+
 The state files are plain JSON and meant to be edited. Change a size, drop a
 window, or write a layout from scratch and restore it.
 
@@ -137,6 +225,9 @@ omarchy bar move io.github.ferc10110.save-them-all --section left
 | `SAVE_THEM_ALL_TIMEOUT` | `25` | Seconds to wait for a window to appear |
 | `SAVE_THEM_ALL_LOGIN_DELAY` | `3` | Seconds to let the session settle before restoring at login |
 | `SAVE_THEM_ALL_RUNTIME` | `$XDG_RUNTIME_DIR/save-them-all` | Where the once-per-session marker lives |
+| `SAVE_THEM_ALL_BROWSERS` | `chromium\|chrome\|brave\|vivaldi-bin\|msedge` | Browser process names to close cleanly, as a `pgrep` pattern |
+| `SAVE_THEM_ALL_QUIT_TIMEOUT` | `10` | Seconds to wait for the browser to quit before going on anyway |
+| `SAVE_THEM_ALL_MENU` | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | The menu file the switch edits |
 
 ## Requirements
 
@@ -152,6 +243,9 @@ on `jq`, `python3` and `pstree`, all of which ship with Omarchy.
   restoring targets whichever workspace is active.
 - **Login restore needs the widget in the bar.** The panel is what starts it, so
   a disabled plugin, or a bar without the widget, restores nothing at login.
+- **Closing the browser cleanly covers the Omarchy menu only.** Logout, Reboot
+  and Shutdown started some other way still close the browser abruptly, and so
+  does a power cut or a frozen machine.
 - **Chromium is a single instance.** Its windows are created by the process
   that is already running, so they are arranged after the fact rather than
   placed as they open. When the browser restores its own last session, those
@@ -168,6 +262,11 @@ on `jq`, `python3` and `pstree`, all of which ship with Omarchy.
 ```sh
 omarchy plugin remove io.github.ferc10110.save-them-all
 ```
+
+Turn **Close the browser cleanly** off first to take its lines out of your menu
+file. If you forget, nothing breaks, since those lines fall back to Omarchy's
+own commands, and you can delete everything between `>>> Save Them All` and
+`<<< Save Them All` by hand.
 
 Saved layouts are left behind in `~/.local/state/save-them-all/`; delete that
 directory to clear them.

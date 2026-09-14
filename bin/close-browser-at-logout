@@ -1,0 +1,228 @@
+#!/bin/bash
+
+# close-browser-at-logout: quit the browser the way its own Exit does, then run
+# the command it was given. Omarchy's Logout, Reboot and Shutdown close windows
+# one at a time and end the session moments later, which leaves Chromium without
+# its tabs on the next start. Pointing those three menu entries at this script
+# lets the browser save its session first. It also adds and removes those
+# entries, which is how the panel's switch talks to the menu file.
+#
+# Usage: close-browser-at-logout [COMMAND [ARG...]]
+#        close-browser-at-logout --status | --enable | --disable
+
+set -uo pipefail
+
+SELF=$(readlink -f "$0")
+MENU="${SAVE_THEM_ALL_MENU:-$HOME/.config/omarchy/extensions/omarchy-menu.jsonc}"
+BROWSERS="${SAVE_THEM_ALL_BROWSERS:-chromium|chrome|brave|vivaldi-bin|msedge}"
+TIMEOUT="${SAVE_THEM_ALL_QUIT_TIMEOUT:-10}"
+
+usage() {
+  cat <<USAGE
+Usage: close-browser-at-logout [COMMAND [ARG...]]
+       close-browser-at-logout --status | --enable | --disable
+
+With a command, asks every running Chromium-based browser to quit, waits for it
+to finish saving its session, then runs the command. Without one, only quits
+the browser.
+
+Options:
+  --status      Print whether the Omarchy menu uses this before Logout, Reboot
+                and Shutdown, as JSON.
+  --enable      Make Logout, Reboot and Shutdown in the Omarchy menu close the
+                browser first.
+  --disable     Put those three menu entries back the way they were.
+  -h, --help    Show this help.
+
+Environment:
+  SAVE_THEM_ALL_BROWSERS       Browser process names, as a pgrep pattern
+                               (default chromium|chrome|brave|vivaldi-bin|msedge).
+  SAVE_THEM_ALL_QUIT_TIMEOUT   Seconds to wait for the browser to quit (default 10).
+  SAVE_THEM_ALL_MENU           Menu extension file to edit
+                               (default ~/.config/omarchy/extensions/omarchy-menu.jsonc).
+USAGE
+}
+
+# Chromium runs its renderers, GPU and utility processes from the same binary,
+# each started with --type=. The browser process is the one without it: it owns
+# the windows, writes the session, and takes the others down when it goes.
+# Chromium rewrites its command line into a single string, so the flag is looked
+# for anywhere in it rather than as an argument of its own.
+browser_pids() {
+  local pid cmdline
+  for pid in $(pgrep -u "$(id -u)" -x "$BROWSERS"); do
+    cmdline=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)
+    [[ -n $cmdline && ! $cmdline =~ (^|[[:space:]])--type= ]] && echo "$pid"
+  done
+}
+
+# SIGTERM is what the browser gets when the system shuts down in an orderly way,
+# and Chromium treats it like Exit from its menu: every window closes at once and
+# the session is kept whole, so "Continue where you left off" brings all of it
+# back. Closing the windows one by one instead is indistinguishable from you
+# closing them yourself, and each one closed is dropped from the session.
+quit_browsers() {
+  local pids=() pid alive deadline
+  mapfile -t pids < <(browser_pids)
+  ((${#pids[@]})) || return 0
+  kill -TERM "${pids[@]}" 2>/dev/null
+  deadline=$((SECONDS + TIMEOUT))
+  while ((SECONDS <= deadline)); do
+    alive=0
+    for pid in "${pids[@]}"; do
+      kill -0 "$pid" 2>/dev/null && alive=1
+    done
+    ((alive)) || return 0
+    sleep 0.1
+  done
+  echo "close-browser-at-logout: the browser did not quit within ${TIMEOUT}s, going on" >&2
+}
+
+# The menu file is JSONC and belongs to the user, comments and all, so it is
+# edited as text: the entries live between two marker comments that are added
+# and removed whole, and every write is checked to still parse the way the
+# Omarchy menu reads it before it replaces the file.
+menu() { # $1 status|enable|disable
+  python3 - "$1" "$MENU" "$SELF" <<'PY'
+import json, os, re, shlex, sys, tempfile
+
+mode, path, script = sys.argv[1:4]
+BEGIN, END = "// >>> Save Them All", "// <<< Save Them All"
+ENTRIES = [("system.logout", "Logout", "omarchy-system-logout"),
+           ("system.reboot", "Reboot", "omarchy-system-reboot"),
+           ("system.shutdown", "Shutdown", "omarchy-system-shutdown")]
+DEFAULT_MENU = os.path.join(os.environ.get("OMARCHY_PATH") or "/usr/share/omarchy",
+                            "default/omarchy/omarchy-menu.jsonc")
+
+def fail(message):
+    print(f"close-browser-at-logout: {message}", file=sys.stderr)
+    sys.exit(1)
+
+def strip_jsonc(text):
+    # The same two rules the Omarchy menu applies before JSON.parse.
+    text = re.sub(r"^\s*//[^\n]*(\n|$)", "", text, flags=re.M)
+    return re.sub(r",(\s*[}\]])", r"\1", text)
+
+def parse(text):
+    stripped = strip_jsonc(text)
+    return json.loads(stripped) if stripped.strip() else {}
+
+def marker_lines(text, marker):
+    return [l for l in text.splitlines() if l.strip().startswith(marker)]
+
+def without_block(text):
+    out, inside = [], False
+    for line in text.splitlines(keepends=True):
+        if line.strip().startswith(BEGIN):
+            inside = True
+        elif inside:
+            inside = not line.strip().startswith(END)
+        else:
+            out.append(line)
+    return "".join(out)
+
+def action(command):
+    # Fall back to Omarchy's own command if the plugin is gone, so removing it
+    # can never leave Logout, Reboot or Shutdown pointing at nothing.
+    home = os.path.expanduser("~")
+    rest = script[len(home):] if script.startswith(home + "/") else None
+    target = "$HOME" + rest if rest and re.fullmatch(r"[A-Za-z0-9._/@+-]+", rest) else shlex.quote(script)
+    return f'p={target}; [ -x "$p" ] && exec "$p" {command}; exec {command}'
+
+def entries():
+    # The menu fills every field an entry leaves out with an empty default, so
+    # an entry carrying only an action would blank the icon and label. Each one
+    # is copied whole from Omarchy's default menu and only the action changes.
+    try:
+        defaults = parse(open(DEFAULT_MENU).read())
+    except (OSError, ValueError):
+        defaults = {}
+    out = {}
+    for key, label, command in ENTRIES:
+        entry = dict(defaults.get(key) or {"label": label})
+        if re.fullmatch(r"[A-Za-z0-9._-]+", str(entry.get("action", ""))):
+            command = entry["action"]
+        entry["action"] = action(command)
+        out[key] = entry
+    return out
+
+def block():
+    lines = [
+        f"  {BEGIN}: close the browser cleanly before Logout, Reboot and Shutdown,",
+        "  // so it brings its tabs back. Added by the plugin's panel; turn the switch off",
+        "  // there to remove these lines. Without the plugin they run Omarchy's own command.",
+    ]
+    lines += [f"  {json.dumps(key)}: {json.dumps(entry, ensure_ascii=False)}," for key, entry in entries().items()]
+    lines.append(f"  {END}")
+    return "\n".join(lines) + "\n"
+
+def write(text):
+    data = parse(text)  # never replace the file with something the menu cannot read
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".omarchy-menu.", dir=os.path.dirname(path))
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    if os.path.exists(path):
+        os.chmod(tmp, os.stat(path).st_mode & 0o777)
+    os.replace(tmp, path)
+    return data
+
+text = open(path).read() if os.path.exists(path) else ""
+if len(marker_lines(text, BEGIN)) != len(marker_lines(text, END)):
+    fail(f"the Save Them All lines in {path} are incomplete; fix or delete them by hand")
+enabled = bool(marker_lines(text, BEGIN))
+rest = without_block(text)
+try:
+    data = parse(rest)
+except ValueError as e:
+    fail(f"cannot read {path}: {e}")
+if not isinstance(data, dict) or isinstance(data.get("items"), dict):
+    fail(f"{path} is laid out in a way this switch does not edit; add the entries by hand")
+conflict = next((key for key, _, _ in ENTRIES if key in data), "")
+
+if mode == "status":
+    print(json.dumps({"enabled": enabled, "conflict": conflict}))
+elif mode == "enable":
+    if conflict:
+        fail(f"{path} already customizes {conflict}; leaving it alone")
+    body = rest if rest.strip() else "{\n}\n"
+    close = body.rfind("}")
+    if close < 0:
+        fail(f"cannot find the end of {path}")
+    head, tail = body[:close], body[close:]
+    # The last entry before the new ones needs a comma. Comment lines don't count.
+    end = len(head)
+    while True:
+        seg = head[:end].rstrip()
+        newline = seg.rfind("\n")
+        if seg and seg[newline + 1:].lstrip().startswith("//"):
+            end = max(newline, 0)
+            continue
+        break
+    if seg and seg[-1] not in "{,":
+        head = seg + "," + head[len(seg):]
+    head = head.rstrip(" \t")
+    if not head.endswith("\n"):
+        head += "\n"
+    if not head.endswith("\n\n") and seg and seg[-1] != "{":
+        head += "\n"
+    data = write(head + block() + tail)
+    if any(data.get(key) != entry for key, entry in entries().items()):
+        fail(f"wrote {path} but the entries did not come out as expected")
+elif mode == "disable":
+    if enabled:
+        write(re.sub(r"\n[ \t]*\n(\s*\}\s*)$", r"\n\1", rest))
+PY
+}
+
+case "${1:-}" in
+  --status) menu status; exit ;;
+  --enable) menu enable; exit ;;
+  --disable) menu disable; exit ;;
+  -h | --help) usage; exit 0 ;;
+  -*) echo "close-browser-at-logout: unknown option: $1" >&2; usage >&2; exit 1 ;;
+esac
+
+quit_browsers
+(($#)) && exec "$@"
+exit 0

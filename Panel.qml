@@ -7,10 +7,11 @@ import qs.Commons
 import qs.Ui
 
 // The panel is a thin face over the bash scripts in bin/: it shows what is on
-// disk for the workspace you are looking at, runs save / restore, and flips
-// which layouts come back at login. Everything it knows comes from the state
-// files, which the scripts own, so a layout saved from the menu or the
-// terminal shows up here without anyone being told.
+// disk for the workspace you are looking at, runs save / restore, flips which
+// layouts come back at login, and turns on closing the browser cleanly before
+// leaving the session. Everything it knows comes from files the scripts own,
+// so a layout saved from the menu or the terminal shows up here without anyone
+// being told.
 Panel {
   id: root
   moduleName: "io.github.ferc10110.save-them-all"
@@ -25,6 +26,8 @@ Panel {
   property string phase: ""        // "save" | "restore" | ""
   property var loginRows: []       // [{ workspace, windows, saved_at, autostart }]
   property bool listPending: false
+  property var browserQuit: ({ enabled: false, conflict: "" })
+  property string browserQuitError: ""
 
   readonly property bool busy: phase !== ""
   readonly property bool hasSaved: record !== null
@@ -45,6 +48,16 @@ Panel {
     if (!hasSaved) return "Nothing saved for this workspace yet."
     var n = savedWindows.length
     return n + (n === 1 ? " window" : " windows") + " · saved " + savedAtText
+  }
+
+  readonly property bool browserQuitBlocked: browserQuit.enabled !== true
+    && (browserQuit.conflict !== "" || browserQuitError !== "")
+
+  readonly property string browserQuitText: {
+    if (browserQuitError !== "") return browserQuitError
+    if (browserQuit.enabled !== true && browserQuit.conflict !== "")
+      return "Your Omarchy menu already changes " + browserQuit.conflict + ", so this stays off."
+    return "Before Logout, Reboot and Shutdown, so it brings its tabs back. Edits the Omarchy menu."
   }
 
   readonly property string savedAtText: {
@@ -114,7 +127,30 @@ Panel {
     toggleProc.running = true
   }
 
-  onOpenedChanged: if (opened) refreshLogin()
+  function setBrowserQuitError(text) {
+    var message = String(text || "").trim()
+    if (message !== "") browserQuitError = message.split("\n").pop().replace(/^close-browser-at-logout: /, "")
+  }
+
+  function refreshBrowserQuit() {
+    if (!quitStatusProc.running) quitStatusProc.running = true
+  }
+
+  function toggleBrowserQuit() {
+    if (quitToggleProc.running || browserQuitBlocked) return
+    var on = browserQuit.enabled !== true
+    browserQuitError = ""
+    // Flip the switch on screen now; the status read after the write confirms it.
+    browserQuit = Object.assign({}, browserQuit, { enabled: on })
+    quitToggleProc.command = [pluginPath("bin/close-browser-at-logout"), on ? "--enable" : "--disable"]
+    quitToggleProc.running = true
+  }
+
+  onOpenedChanged: if (opened) {
+    refreshLogin()
+    browserQuitError = ""
+    refreshBrowserQuit()
+  }
 
   // The shell loads this panel when the session starts, which makes it the
   // place to bring marked layouts back. The script decides whether this is the
@@ -190,6 +226,35 @@ Panel {
   Process {
     id: toggleProc
     onExited: root.refreshLogin()
+  }
+
+  // The switch below lives in the user's own menu file, which the script edits
+  // and reads back, so the panel only ever shows what that file says.
+  Process {
+    id: quitStatusProc
+    command: [root.pluginPath("bin/close-browser-at-logout"), "--status"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var status = JSON.parse(String(text || ""))
+          if (status && typeof status === "object") root.browserQuit = status
+        } catch (e) {}
+      }
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.setBrowserQuitError(text)
+    }
+  }
+
+  Process {
+    id: quitToggleProc
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.setBrowserQuitError(text)
+    }
+    onExited: root.refreshBrowserQuit()
   }
 
   KeyboardPanel {
@@ -363,6 +428,33 @@ Panel {
                 onClicked: root.toggleLogin(modelData)
               }
             }
+          }
+
+          // Omarchy's Logout, Reboot and Shutdown close windows one at a time,
+          // which costs Chromium its tabs. This is the one switch that reaches
+          // outside the plugin's own files, so it starts off and says so.
+          PanelSeparator {
+            width: parent.width
+            foreground: root.foreground
+          }
+
+          PanelSectionHeader {
+            width: parent.width
+            text: "Leaving the session"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          Toggle {
+            width: parent.width
+            label: "Close the browser cleanly"
+            description: root.browserQuitText
+            checked: root.browserQuit.enabled === true
+            enabled: !root.browserQuitBlocked
+            opacity: enabled ? 1 : 0.55
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: root.toggleBrowserQuit()
           }
         }
       }
