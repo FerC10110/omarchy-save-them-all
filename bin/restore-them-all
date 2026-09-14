@@ -3,7 +3,7 @@
 # restore-them-all: reopen on the active workspace the windows saved by
 # save-them-all, rebuild the dwindle tree and restore the geometry.
 #
-# Usage: restore-them-all [--quiet]
+# Usage: restore-them-all [--quiet] [--workspace N]
 
 set -euo pipefail
 
@@ -14,15 +14,16 @@ QUIET=0
 
 usage() {
   cat <<USAGE
-Usage: restore-them-all [--quiet]
+Usage: restore-them-all [--quiet] [--workspace N]
 
 Reopens the windows saved by save-them-all for the active Hyprland workspace,
 rebuilds the dwindle split tree and restores each window's size and position.
 Windows that are already open are reused instead of being launched twice.
 
 Options:
-  --quiet      Do not send a desktop notification.
-  -h, --help   Show this help.
+  --workspace N   Switch to workspace N first and restore that one.
+  --quiet         Do not send a desktop notification.
+  -h, --help      Show this help.
 
 Environment:
   SAVE_THEM_ALL_STATE     State directory (default ~/.local/state/save-them-all).
@@ -30,12 +31,17 @@ Environment:
 USAGE
 }
 
-case "${1:-}" in
-  --quiet) QUIET=1 ;;
-  -h | --help) usage; exit 0 ;;
-  "") ;;
-  *) echo "restore-them-all: unknown option: $1" >&2; usage >&2; exit 1 ;;
-esac
+TARGET_WS=""
+while (($#)); do
+  case "$1" in
+    --quiet) QUIET=1; shift ;;
+    --workspace)
+      [[ ${2:-} =~ ^[0-9]+$ ]] || { echo "restore-them-all: --workspace needs a number" >&2; exit 1; }
+      TARGET_WS=$2; shift 2 ;;
+    -h | --help) usage; exit 0 ;;
+    *) echo "restore-them-all: unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
 
 notify() {
   omarchy-notification-send -g 󱂬 "$1" "${2:-}" >/dev/null 2>&1 || true
@@ -45,7 +51,21 @@ dispatch() {
   hyprctl dispatch "$1" >/dev/null
 }
 
+# The tree is rebuilt by focusing windows, which only works on the workspace
+# on screen, so restoring another workspace means going there first.
+if [[ -n $TARGET_WS ]]; then
+  dispatch "hl.dsp.focus({ workspace = '$TARGET_WS' })"
+  for _ in {1..25}; do
+    [[ $(hyprctl -j activeworkspace | jq -r '.id') == "$TARGET_WS" ]] && break
+    sleep 0.1
+  done
+fi
+
 ws=$(hyprctl -j activeworkspace | jq -r '.id')
+if [[ -n $TARGET_WS && $ws != "$TARGET_WS" ]]; then
+  echo "Could not switch to workspace $TARGET_WS" >&2
+  exit 1
+fi
 file="$STATE_DIR/workspace-$ws.json"
 if [[ ! -f $file ]]; then
   notify "Nothing saved for workspace $ws" "Run 'Save them all' first"
@@ -58,8 +78,23 @@ clients_on_ws() {
   hyprctl -j clients | jq -c --argjson ws "$ws" '[.[] | select(.workspace.id == $ws and .mapped)]'
 }
 
+# Chromium's browser window is "chromium" when a launcher starts it and
+# "chromium-browser" when it is started some other ways; both are the same app.
 addresses_of() { # $1 class -> addresses sorted by position
-  clients_on_ws | jq -r --arg c "$1" '[.[] | select(.class == $c)] | sort_by(.at[0], .at[1]) | .[].address'
+  clients_on_ws | jq -r --arg c "$1" '
+    def family: if . == "chromium-browser" then "chromium" else . end;
+    [.[] | select((.class // "" | family) == ($c | family))] | sort_by(.at[0], .at[1]) | .[].address'
+}
+
+is_browser_cmd() { # $1 launch command
+  [[ $1 == omarchy-launch-webapp* || $1 == omarchy-launch-browser* ]]
+}
+
+# Any browser or webapp window, on any workspace, means the browser is already up.
+browser_running() {
+  hyprctl -j clients | jq -e '
+    any(.[]; ((.class // "") | test("^(chrome-.*-Default|chromium|chromium-browser|firefox|zen|librewolf)$"))
+      or ([.tags[]? | sub("\\*$"; "")] | index("chromium-based-browser") != null))' >/dev/null
 }
 
 # Wait for a window of this class whose address was not there before. Prints the address.
@@ -182,6 +217,30 @@ PY
 
 # ---------- 1. Open whatever is missing ----------
 mapfile -t entries < <(jq -c '.windows[]' "$file")
+
+# A browser starting cold restores its own last session, and those windows
+# arrive in waves. Counting what is missing before it finishes would launch
+# windows it was about to bring back, so start it first, let it settle, and
+# only then count. The browser window is preferred for the first launch: a
+# plain start restores the session instead of adding a window to it.
+if ! browser_running; then
+  first_cmd=""
+  for e in "${entries[@]}"; do
+    c=$(jq -r .cmd <<<"$e")
+    is_browser_cmd "$c" || continue
+    [[ $c == omarchy-launch-browser* ]] && { first_cmd=$c; break; }
+    [[ -z $first_cmd ]] && first_cmd=$c
+  done
+  if [[ -n $first_cmd ]]; then
+    echo "starting the browser: $first_cmd"
+    setsid -f bash -c "$first_cmd" >/dev/null 2>&1
+    for _ in $(seq $((TIMEOUT * 5))); do
+      browser_running && break
+      sleep 0.2
+    done
+    wait_settled
+  fi
+fi
 declare -A used=()
 declare -a addrs=()
 opened=0
@@ -214,7 +273,7 @@ for i in "${!entries[@]}"; do
     addrs[$i]=$addr
     used[$cls]=$need
     ((++opened))
-    [[ $cmd == omarchy-launch-browser* ]] && wait_settled
+    is_browser_cmd "$cmd" && wait_settled
   else
     echo "never appeared: $cls" >&2
     missing+=("$cls")

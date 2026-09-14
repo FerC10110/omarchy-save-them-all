@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# restore-them-all-at-login: bring back every workspace whose layout is marked
+# to be restored at login, once per Hyprland session. Also lists and flips that
+# mark, which is how the panel's switches talk to the state files.
+#
+# Usage: restore-them-all-at-login [--force]
+#        restore-them-all-at-login --list
+#        restore-them-all-at-login --enable N | --disable N
+
+set -euo pipefail
+
+STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
+DELAY="${SAVE_THEM_ALL_LOGIN_DELAY:-3}"
+BIN_DIR=$(dirname "$(readlink -f "$0")")
+
+usage() {
+  cat <<USAGE
+Usage: restore-them-all-at-login [--force]
+       restore-them-all-at-login --list
+       restore-them-all-at-login --enable N | --disable N
+
+With no options, restores every workspace marked to come back at login, then
+returns to the workspace you started on. It runs once per Hyprland session:
+later calls in the same session do nothing, so restarting the shell never
+reshuffles your windows.
+
+Options:
+  --list        Print every saved workspace and whether it restores at login, as JSON.
+  --enable N    Restore workspace N at login.
+  --disable N   Stop restoring workspace N at login.
+  --force       Run even if this session has already been restored.
+  -h, --help    Show this help.
+
+Environment:
+  SAVE_THEM_ALL_STATE         State directory (default ~/.local/state/save-them-all).
+  SAVE_THEM_ALL_LOGIN_DELAY   Seconds to let the session settle first (default 3).
+  SAVE_THEM_ALL_RUNTIME       Where the once-per-session marker lives
+                              (default \$XDG_RUNTIME_DIR/save-them-all).
+USAGE
+}
+
+notify() {
+  omarchy-notification-send -g 󱂬 "$1" "${2:-}" >/dev/null 2>&1 || true
+}
+
+list() {
+  local files=("$STATE_DIR"/workspace-*.json)
+  [[ -e ${files[0]} ]] || { echo '[]'; return; }
+  jq -s '[.[] | select(.workspace != null and (.windows | type) == "array")
+          | {workspace, windows: (.windows | length), saved_at, autostart: (.autostart == true)}]
+         | sort_by(.workspace)' "${files[@]}"
+}
+
+set_autostart() { # $1 workspace, $2 true|false
+  [[ $1 =~ ^[0-9]+$ ]] || { echo "restore-them-all-at-login: workspace must be a number" >&2; exit 1; }
+  local file="$STATE_DIR/workspace-$1.json" tmp
+  [[ -f $file ]] || { echo "Nothing saved for workspace $1" >&2; exit 1; }
+  tmp=$(mktemp "$STATE_DIR/.autostart.XXXXXX")
+  jq --argjson on "$2" '.autostart = $on' "$file" >"$tmp"
+  mv "$tmp" "$file"
+}
+
+FORCE=0
+case "${1:-}" in
+  --list) list; exit 0 ;;
+  --enable) set_autostart "${2:-}" true; exit 0 ;;
+  --disable) set_autostart "${2:-}" false; exit 0 ;;
+  --force) FORCE=1 ;;
+  -h | --help) usage; exit 0 ;;
+  "") ;;
+  *) echo "restore-them-all-at-login: unknown option: $1" >&2; usage >&2; exit 1 ;;
+esac
+
+# Once per session. The marker lives in the runtime directory, which is owned by
+# this user and emptied when the session ends, and is named after the Hyprland
+# instance, so logging out and back in counts as a new session. It is claimed
+# before anything else happens: a shell restart halfway through a restore must
+# not start a second one.
+if ((!FORCE)); then
+  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || exit 0
+  runtime="${SAVE_THEM_ALL_RUNTIME:-${XDG_RUNTIME_DIR:-}/save-them-all}"
+  [[ $runtime != /save-them-all ]] || exit 0   # no runtime directory: never guess one
+  mkdir -p -m 700 "$runtime"
+  marker="$runtime/login-$HYPRLAND_INSTANCE_SIGNATURE"
+  (set -o noclobber; : >"$marker") 2>/dev/null || exit 0
+fi
+
+mapfile -t workspaces < <(list | jq -r '.[] | select(.autostart) | .workspace')
+((${#workspaces[@]})) || exit 0
+
+sleep "$DELAY"
+start_ws=$(hyprctl -j activeworkspace | jq -r '.id')
+
+restored=()
+failed=()
+for w in "${workspaces[@]}"; do
+  echo "== workspace $w"
+  if "$BIN_DIR/restore-them-all" --quiet --workspace "$w"; then
+    restored+=("$w")
+  else
+    failed+=("$w")
+  fi
+done
+
+hyprctl dispatch "hl.dsp.focus({ workspace = '$start_ws' })" >/dev/null
+
+if ((${#failed[@]})); then
+  notify "Restored at login, with gaps" "Check workspace $(printf '%s, ' "${failed[@]}" | sed 's/, $//')"
+  exit 1
+fi
+notify "Windows restored at login" "Workspace $(printf '%s, ' "${restored[@]}" | sed 's/, $//')"

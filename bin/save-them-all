@@ -144,9 +144,12 @@ fi
 
 mkdir -p "$STATE_DIR"
 out="$STATE_DIR/workspace-$ws.json"
+# Saving again replaces the windows, not the choice to restore them at login.
+autostart=$(jq -r 'if .autostart == true then "true" else "false" end' "$out" 2>/dev/null || echo false)
 tmp=$(mktemp "$STATE_DIR/.save.XXXXXX")
-jq -n --argjson ws "$ws" --arg monitor "$monitor" --arg saved_at "$(date -Is)" --argjson windows "$entries" \
-  '{workspace: $ws, monitor: $monitor, saved_at: $saved_at, windows: $windows}' >"$tmp"
+jq -n --argjson ws "$ws" --arg monitor "$monitor" --arg saved_at "$(date -Is)" \
+  --argjson autostart "$autostart" --argjson windows "$entries" \
+  '{workspace: $ws, monitor: $monitor, saved_at: $saved_at, autostart: $autostart, windows: $windows}' >"$tmp"
 mv "$tmp" "$out"
 
 printf '%s\n' "${lines[@]}"
