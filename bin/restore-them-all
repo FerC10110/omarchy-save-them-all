@@ -86,8 +86,87 @@ addresses_of() { # $1 class -> addresses sorted by position
     [.[] | select((.class // "" | family) == ($c | family))] | sort_by(.at[0], .at[1]) | .[].address'
 }
 
-is_browser_cmd() { # $1 launch command
-  [[ $1 == omarchy-launch-webapp* || $1 == omarchy-launch-browser* ]]
+# The state file is meant to be edited by hand, so nothing read from it is
+# trusted. Every window is checked before anything happens: sizes and positions
+# end up in Hyprland dispatches and shell arithmetic, so they must be whole
+# numbers, and the launcher must be one of the four kinds launch() knows.
+# Files saved by version 1.2 or older carry a "cmd" command line instead. The
+# Omarchy launchers it could name are read as their kind; any other command
+# line counts as no launcher until the workspace is saved again. Prints one
+# checked window per line.
+read_windows() { # $1 state file
+  jq -c '
+    def whole: type == "number" and . == floor and . > -1000000 and . < 1000000;
+    def pair: type == "array" and length == 2 and all(.[]; whole);
+    def legacy:
+      (.cmd // "") as $c
+      | if $c == "omarchy-launch-browser" then {kind: "browser"}
+        elif $c == "omarchy-launch-terminal" then {kind: "terminal"}
+        elif $c == "omarchy-launch-terminal herdr" then {kind: "terminal", session: "herdr"}
+        elif $c == "omarchy-launch-terminal-tmux" then {kind: "terminal", session: "tmux"}
+        elif ($c | test("^omarchy-launch-webapp \"?https?://[^\" ]+\"?$"))
+        then {kind: "webapp", url: ($c | capture("(?<u>https?://[^\" ]+)").u | gsub("%%"; "%"))}
+        else null end;
+    def known:
+      . == null or (type == "object" and (
+        .kind == "browser"
+        or (.kind == "terminal" and (.session == null or .session == "herdr" or .session == "tmux"))
+        or (.kind == "webapp" and (.url | type == "string" and test("^https?://[^[:space:][:cntrl:]]+$")))
+        or (.kind == "app" and (.desktop | type == "string" and test("^[^/:[:cntrl:]]+\\.desktop$")))));
+    def problem:
+      if type != "object" then "is not an object"
+      elif (.class | type) != "string" or .class == "" then "has no class"
+      elif (.at | pair | not) then "at must be two whole numbers"
+      elif (.size | pair | not) then "size must be two whole numbers"
+      elif ((.floating // false) | type) != "boolean" then "floating must be true or false"
+      elif (if has("launch") then .launch else legacy end | known | not) then "launch is not one of browser, terminal, webapp or app"
+      else null end;
+    if (.windows | type) != "array" then error("has no windows list") else . end
+    | .windows | to_entries[]
+    | .key as $n | .value
+    | problem as $p
+    | if $p then error("window \($n + 1)\(if type == "object" and (.class | type) == "string" then " (\(.class))" else "" end) \($p)") else . end
+    | {class, launch: (if has("launch") then .launch else legacy end),
+       at: (.at | map(floor)), size: (.size | map(floor)), floating: (.floating // false)}
+  ' "$1"
+}
+
+# Each kind maps to a fixed launcher. The file only picks one and, for a webapp
+# or an app, gives it a URL or a desktop entry id, always as a single argument:
+# nothing in the file is ever run as a command.
+launch() { # $1 launch json
+  local kind
+  kind=$(jq -r '.kind // "none"' <<<"$1")
+  case $kind in
+    browser) setsid -f omarchy-launch-browser ;;
+    terminal)
+      case $(jq -r '.session // ""' <<<"$1") in
+        herdr) setsid -f omarchy-launch-terminal herdr ;;
+        tmux) setsid -f omarchy-launch-terminal-tmux ;;
+        *) setsid -f omarchy-launch-terminal ;;
+      esac ;;
+    webapp) setsid -f omarchy-launch-webapp "$(jq -r .url <<<"$1")" ;;
+    app) setsid -f uwsm-app -- "$(jq -r .desktop <<<"$1")" ;;   # uwsm reads any *.desktop as an entry id
+    *) return 1 ;;
+  esac >/dev/null 2>&1
+}
+
+describe() { # $1 launch json -> "webapp https://…"
+  jq -r 'if . == null then "no launcher" else [.kind, (.session // .url // .desktop // empty)] | join(" ") end' <<<"$1"
+}
+
+# An app is reopened from its desktop entry, which has to be installed.
+app_installed() { # $1 desktop entry id
+  local d dirs
+  IFS=: read -r -a dirs <<<"${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+  for d in "${dirs[@]}"; do
+    [[ -n $d && -f $d/applications/$1 ]] && return 0
+  done
+  return 1
+}
+
+is_browser() { # $1 launch json
+  jq -e '.kind == "browser" or .kind == "webapp"' <<<"$1" >/dev/null
 }
 
 # Any browser or webapp window, on any workspace, means the browser is already up.
@@ -216,7 +295,16 @@ PY
 }
 
 # ---------- 1. Open whatever is missing ----------
-mapfile -t entries < <(jq -c '.windows[]' "$file")
+if ! windows=$(read_windows "$file" 2>&1); then
+  problem=${windows##*$'\n'}   # the windows checked before it come first
+  problem=${problem#jq: }
+  problem=${problem#error (at *): }
+  notify "Cannot restore workspace $ws" "$(basename "$file"): $problem"
+  echo "restore-them-all: $file: $problem" >&2
+  exit 1
+fi
+entries=()
+[[ -z $windows ]] || mapfile -t entries <<<"$windows"
 
 # A browser starting cold restores its own last session, and those windows
 # arrive in waves. Counting what is missing before it finishes would launch
@@ -224,16 +312,16 @@ mapfile -t entries < <(jq -c '.windows[]' "$file")
 # only then count. The browser window is preferred for the first launch: a
 # plain start restores the session instead of adding a window to it.
 if ! browser_running; then
-  first_cmd=""
+  first=""
   for e in "${entries[@]}"; do
-    c=$(jq -r .cmd <<<"$e")
-    is_browser_cmd "$c" || continue
-    [[ $c == omarchy-launch-browser* ]] && { first_cmd=$c; break; }
-    [[ -z $first_cmd ]] && first_cmd=$c
+    l=$(jq -c .launch <<<"$e")
+    is_browser "$l" || continue
+    [[ $(jq -r .kind <<<"$l") == browser ]] && { first=$l; break; }
+    [[ -z $first ]] && first=$l
   done
-  if [[ -n $first_cmd ]]; then
-    echo "starting the browser: $first_cmd"
-    setsid -f bash -c "$first_cmd" >/dev/null 2>&1
+  if [[ -n $first ]]; then
+    echo "starting the browser: $(describe "$first")"
+    launch "$first"
     for _ in $(seq $((TIMEOUT * 5))); do
       browser_running && break
       sleep 0.2
@@ -250,7 +338,7 @@ missing=()
 for i in "${!entries[@]}"; do
   e=${entries[$i]}
   cls=$(jq -r .class <<<"$e")
-  cmd=$(jq -r .cmd <<<"$e")
+  l=$(jq -c .launch <<<"$e")
   need=$(( ${used[$cls]:-0} + 1 ))
   mapfile -t existing < <(addresses_of "$cls")
   if ((${#existing[@]} >= need)); then
@@ -260,9 +348,19 @@ for i in "${!entries[@]}"; do
     echo "already open: $cls"
     continue
   fi
+  if [[ $l == null ]]; then
+    echo "no launcher: $cls" >&2
+    missing+=("$cls (no launcher)")
+    continue
+  fi
+  if [[ $(jq -r .kind <<<"$l") == app ]] && ! app_installed "$(jq -r .desktop <<<"$l")"; then
+    echo "not installed: $(describe "$l")" >&2
+    missing+=("$cls (not installed)")
+    continue
+  fi
   before=$(printf '%s\n' "${existing[@]}")
-  echo "opening: $cls  ($cmd)"
-  setsid -f bash -c "$cmd" >/dev/null 2>&1
+  echo "opening: $cls  ($(describe "$l"))"
+  launch "$l"
   if addr=$(wait_new_window "$cls" "$before"); then
     sleep 1   # grace period: an app that fails to start maps a window and closes it right away
     if ! addresses_of "$cls" | grep -qx "$addr"; then
@@ -273,7 +371,7 @@ for i in "${!entries[@]}"; do
     addrs[$i]=$addr
     used[$cls]=$need
     ((++opened))
-    is_browser_cmd "$cmd" && wait_settled
+    is_browser "$l" && wait_settled
   else
     echo "never appeared: $cls" >&2
     missing+=("$cls")

@@ -159,14 +159,19 @@ Entries in the Omarchy menu, in `~/.config/omarchy/extensions/omarchy-menu.jsonc
 `save-them-all` walks the windows of the active workspace, sorted left to right
 and top to bottom, and writes one JSON file per workspace to
 `~/.local/state/save-them-all/`. For each window it records the position, the
-size, and a command that can bring it back:
+size, and which launcher can bring it back:
 
-| Window | How it is reopened |
-|---|---|
-| Chromium webapp | The `.desktop` file whose URL produces that window class, else the URL rebuilt from the class |
-| Browser | `omarchy-launch-browser` |
-| Terminal | `omarchy-launch-terminal`, with `herdr` or `tmux` when the process tree has one |
-| Anything else | Its own `/proc` command line, through `uwsm-app` |
+| Window | Saved as | How it is reopened |
+|---|---|---|
+| Chromium webapp | `webapp` and its URL | `omarchy-launch-webapp`, with the URL of the `.desktop` file that produces that window class, else the URL rebuilt from the class |
+| Browser | `browser` | `omarchy-launch-browser` |
+| Terminal | `terminal`, with `herdr` or `tmux` when the process tree has one | `omarchy-launch-terminal`, running `herdr` for a herdr session, or `omarchy-launch-terminal-tmux` |
+| Anything else | `app` and its desktop entry | The installed desktop entry, through `uwsm-app` |
+
+An app's desktop entry is found the way docks and launchers match windows to
+apps: by its `StartupWMClass`, by an entry named after the window class, or by
+the program it runs. A window with no desktop entry is still saved and put back
+in its place when it is open, but restoring cannot reopen it.
 
 `restore-them-all` then opens whatever is missing and rebuilds the layout.
 Reopening the windows in the right order is not enough: dwindle splits each new
@@ -211,7 +216,28 @@ whole. Every write is checked to still parse the way the Omarchy menu reads it
 before it replaces the file.
 
 The state files are plain JSON and meant to be edited. Change a size, drop a
-window, or write a layout from scratch and restore it.
+window, or write a layout from scratch and restore it:
+
+```json
+{"workspace": 1, "windows": [
+  {"class": "chromium", "launch": {"kind": "browser"}, "at": [0, 26], "size": [1280, 1414], "floating": false},
+  {"class": "kitty", "launch": {"kind": "terminal", "session": "tmux"}, "at": [1280, 26], "size": [1280, 1414], "floating": false},
+  {"class": "chrome-youtube.com__-Default", "launch": {"kind": "webapp", "url": "https://youtube.com/"}, "at": [2560, 26], "size": [1280, 1414], "floating": false},
+  {"class": "mpv", "launch": {"kind": "app", "desktop": "mpv.desktop"}, "at": [100, 100], "size": [800, 450], "floating": true}
+]}
+```
+
+A state file never holds a command, and nothing in it is ever run as one.
+`launch` picks one of the four launchers above and gives it, at most, a URL or
+a desktop entry id as a single argument. An app can only be one that is
+installed, the same as picking it from the app launcher. Before anything
+happens, the whole file is checked: an unknown launcher, a desktop entry given
+as a path, or a size or position that is not a whole number stops the restore
+with a notification naming the window, rather than being passed on.
+
+Layouts saved by version 1.2 or older hold a command line instead. Those still
+restore when the command is one of the Omarchy launchers above; a window saved
+with any other command stays unopened until you save its workspace again.
 
 ## Configure
 
@@ -256,6 +282,10 @@ on `jq`, `python3` and `pstree`, all of which ship with Omarchy.
 - **A terminal comes back as a terminal.** It reopens through Omarchy's own
   launcher so a `herdr` or `tmux` session is picked up again, which also means
   a terminal that was running something else starts empty.
+- **An app comes back as a fresh start.** It reopens from its desktop entry,
+  like launching it from the menu, so a player or editor comes back without
+  the file it had open. An app with no desktop entry is arranged when it is
+  already open, and never launched.
 
 ## Remove
 

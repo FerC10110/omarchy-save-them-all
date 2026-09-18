@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.ferc10110.save-them-all",
   "name": "Save Them All",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "Fernando Cancro",
   "license": "MIT",
   "description": "Save the window layout of a Hyprland workspace and bring it back exactly, on demand or at login: the same apps, the same splits, the same sizes.",

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# save-them-all: save the windows of the active workspace (order, launch
-# command and geometry) so restore-them-all can bring them back later.
+# save-them-all: save the windows of the active workspace (order, how to
+# reopen each one and geometry) so restore-them-all can bring them back later.
 #
 # Usage: save-them-all [--quiet]
 # State: ~/.local/state/save-them-all/workspace-<id>.json (hand-editable)
@@ -9,7 +9,8 @@
 set -euo pipefail
 
 STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
-APPS_DIRS=("$HOME/.local/share/applications" /usr/share/applications)
+IFS=: read -r -a DATA_DIRS <<<"${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+APPS_DIRS=("${DATA_DIRS[@]/%//applications}")
 EXCLUDE_CLASSES='^(org\.omarchy\.screensaver|)$'
 QUIET=0
 
@@ -54,16 +55,16 @@ url_class() {
   printf 'chrome-%s__%s-Default' "$host" "${path//\//_}"
 }
 
-# Find the .desktop file whose URL produces this class; fall back to
-# rebuilding the URL out of the class itself.
-webapp_cmd() {
-  local cls=$1 f exec_line url body host path
+# The URL of the .desktop file that produces this class; failing that, the
+# URL rebuilt out of the class itself.
+webapp_url() { # $1 class
+  local cls=$1 d f exec_line url body host path
   for d in "${APPS_DIRS[@]}"; do for f in "$d"/*.desktop; do
     [[ -f $f ]] || continue
     exec_line=$(grep -m1 '^Exec=omarchy-launch-webapp' "$f" 2>/dev/null) || continue
     url=$(sed -E 's/^Exec=omarchy-launch-webapp +"?([^" ]+)"?.*$/\1/' <<<"$exec_line")
     if [[ $(url_class "$url") == "$cls" ]]; then
-      printf '%s' "${exec_line#Exec=}"
+      printf '%s' "${url//%%/%}"   # an Exec line writes a literal % as %%
       return 0
     fi
   done; done
@@ -71,46 +72,118 @@ webapp_cmd() {
   body=${body%-Default}
   host=${body%%__*}
   path=${body#*__}
-  printf 'omarchy-launch-webapp "https://%s/%s"' "$host" "${path//_/\/}"
+  printf 'https://%s/%s' "$host" "${path//_/\/}"
 }
 
-terminal_cmd() { # $1 pid
+terminal_launch() { # $1 pid
   local tree
   tree=$(pstree -A "$1" 2>/dev/null || true)
   if grep -q 'herdr' <<<"$tree"; then
-    echo "omarchy-launch-terminal herdr"
+    echo '{"kind":"terminal","session":"herdr"}'
   elif grep -q 'tmux' <<<"$tree"; then
-    echo "omarchy-launch-terminal-tmux"
+    echo '{"kind":"terminal","session":"tmux"}'
   else
-    echo "omarchy-launch-terminal"
+    echo '{"kind":"terminal"}'
   fi
 }
 
-# The process's real command line. Electron/Chromium sometimes expose a
-# SINGLE token with spaces in it: if that token is not a file on disk, split
-# it back on spaces.
-proc_cmd() { # $1 pid
-  local -a argv
-  mapfile -d '' -t argv <"/proc/$1/cmdline" 2>/dev/null || return 1
-  ((${#argv[@]})) || return 1
-  if ((${#argv[@]} == 1)) && [[ ${argv[0]} == *" "* && ! -e ${argv[0]} ]]; then
-    read -r -a argv <<<"${argv[0]}"
-  fi
-  printf 'uwsm-app -- %s' "$(printf '%q ' "${argv[@]}" | sed 's/ $//')"
+# The installed desktop entry a window belongs to, matched the way docks and
+# launchers match windows to apps: by StartupWMClass, then by an entry id equal
+# to the class, then by the program its Exec line runs, if only one entry runs
+# it. Prints the entry id, or nothing.
+desktop_entry() { # $1 class, $2 pid
+  python3 - "$1" "$2" "${APPS_DIRS[@]}" <<'PY'
+import os, shlex, sys
+
+cls, pid, dirs = sys.argv[1].lower(), sys.argv[2], sys.argv[3:]
+
+def fields(path):
+    out, section = {}, None
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("["):
+                section = line
+            elif section == "[Desktop Entry]" and "=" in line:
+                key, value = line.split("=", 1)
+                out.setdefault(key.strip(), value.strip())
+    return out
+
+def program(exec_line):
+    try:
+        argv = shlex.split(exec_line)
+    except ValueError:
+        argv = exec_line.split()
+    while argv and (argv[0] == "env" or "=" in argv[0]):   # env FOO=bar program
+        argv = argv[1:]
+    return os.path.basename(argv[0]) if argv else ""
+
+# What the window's process goes by: its executable and its argv[0].
+names = set()
+try:
+    names.add(os.path.basename(os.readlink(f"/proc/{pid}/exe")))
+except OSError:
+    pass
+try:
+    with open(f"/proc/{pid}/cmdline", "rb") as f:
+        names.add(os.path.basename(f.read().split(b"\0")[0].decode(errors="replace").split(" ")[0]))
+except OSError:
+    pass
+names.discard("")
+
+entries = {}   # id -> fields; the first directory holding an id wins, as for any launcher
+for d in dirs:
+    try:
+        listing = sorted(os.listdir(d))
+    except OSError:
+        continue
+    for name in listing:
+        if not name.endswith(".desktop") or ":" in name or name in entries:
+            continue
+        try:
+            entries[name] = fields(os.path.join(d, name))
+        except OSError:
+            pass
+
+by_class, by_id, by_program = [], [], []
+for eid, e in entries.items():
+    if e.get("Type", "Application") != "Application" or e.get("Hidden") == "true" or not e.get("Exec"):
+        continue
+    if e.get("StartupWMClass", "").lower() == cls:
+        by_class.append(eid)
+    elif eid.removesuffix(".desktop").lower() == cls:
+        by_id.append(eid)
+    elif program(e["Exec"]) in names:
+        by_program.append(eid)
+
+def preferred(ids):   # entries a launcher shows come before hidden helpers
+    return [i for i in ids if entries[i].get("NoDisplay") != "true"] or ids
+
+program_match = preferred(by_program)
+pick = (preferred(by_class) or preferred(by_id) or [None])[0] \
+    or (program_match[0] if len(program_match) == 1 else None)
+if pick:
+    print(pick)
+PY
 }
 
-launch_cmd() { # $1 window json
-  local w=$1 cls pid
+# How a window comes back. The state file names one of four kinds of launcher
+# and never a command: restore-them-all maps each kind to a fixed launcher, so
+# editing the file, by hand or otherwise, cannot make it run anything else.
+launch_of() { # $1 window json -> launch json, or null when nothing can reopen it
+  local w=$1 cls pid id
   cls=$(jq -r .class <<<"$w")
   pid=$(jq -r .pid <<<"$w")
   if [[ $cls == chrome-*-Default ]]; then
-    webapp_cmd "$cls"
+    jq -nc --arg u "$(webapp_url "$cls")" '{kind: "webapp", url: $u}'
   elif has_tag "$w" chromium-based-browser || [[ $cls =~ ^(firefox|zen|librewolf)$ ]]; then
-    echo "omarchy-launch-browser"
+    echo '{"kind":"browser"}'
   elif has_tag "$w" terminal; then
-    terminal_cmd "$pid"
+    terminal_launch "$pid"
+  elif id=$(desktop_entry "$cls" "$pid") && [[ -n $id ]]; then
+    jq -nc --arg d "$id" '{kind: "app", desktop: $d}'
   else
-    proc_cmd "$pid"
+    echo null
   fi
 }
 
@@ -126,13 +199,12 @@ lines=()
 while IFS= read -r w; do
   [[ -n $w ]] || continue
   cls=$(jq -r .class <<<"$w")
-  if ! cmd=$(launch_cmd "$w"); then
-    echo "no launch command for $cls, skipping" >&2
-    continue
-  fi
-  entry=$(jq -c --arg cmd "$cmd" '{class, title: (.title // ""), cmd: $cmd, at, size, floating}' <<<"$w")
+  launch=$(launch_of "$w")
+  [[ $launch != null ]] || echo "no desktop entry for $cls: restoring arranges it when open, but cannot reopen it" >&2
+  entry=$(jq -c --argjson l "$launch" '{class, title: (.title // ""), launch: $l, at, size, floating}' <<<"$w")
   entries=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$entries")
-  lines+=("$(jq -r '"\(.size[0])x\(.size[1]) @\(.at[0]),\(.at[1])  \(.class)  ->  \(.cmd)"' <<<"$entry")")
+  lines+=("$(jq -r '"\(.size[0])x\(.size[1]) @\(.at[0]),\(.at[1])  \(.class)  ->  \(
+    .launch | if . == null then "not reopened" else [.kind, (.session // .url // .desktop // empty)] | join(" ") end)"' <<<"$entry")")
 done <<<"$clients"
 
 n=$(jq length <<<"$entries")
