@@ -41,6 +41,10 @@ Scope {
   property var sent: null
   property bool completed: false
   property bool refused: false
+  // A snapshot was already in flight (an unrelated refresh) when run() was
+  // called: that answer is about a moment before the click, so accept()
+  // throws it away and asks again instead of resolving the action against it.
+  property bool rerun: false
   readonly property bool busy: pending !== null
   readonly property bool checking: statusProcess.running
 
@@ -69,12 +73,17 @@ Scope {
     completed = false
     refused = false
     sent = null
+    // snapshotProcess may already be answering an unrelated refresh (from
+    // attach()/check() or an event); setting `running` again would be a
+    // no-op, so that stale answer would otherwise land in accept() as if it
+    // were fresh. Let it finish, then ask again once it is out of the way.
+    rerun = snapshotProcess.running
     var ws = pending.options.workspace
     var here = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 0
     if (ws && ws !== here) {
       switchProcess.command = ["hyprctl", "dispatch", "hl.dsp.focus({ workspace = '" + Number(ws) + "' })"]
       switchProcess.running = true
-    } else {
+    } else if (!rerun) {
       snapshotProcess.running = true
     }
     return true
@@ -96,6 +105,15 @@ Scope {
   }
 
   function accept(text) {
+    if (rerun) {
+      // Discard the stale snapshot this reply carries; ask again once any
+      // workspace switch in flight is done (switchProcess.onExited asks if
+      // this does not need to), so the action sees a snapshot taken after
+      // the click, not before it.
+      rerun = false
+      if (pending && !switchProcess.running) snapshotProcess.running = true
+      return
+    }
     var parsed = Protocol.parseSnapshot(text)
     snapshot = parsed.snapshot
     snapshotProblem = parsed.problem
@@ -130,7 +148,7 @@ Scope {
     if (r.kind === "handoff") {
       // The panel holds a keyboard grab; the helper waits until it is gone.
       if (owner) owner.dismiss()
-      Qt.callLater(function() { if (operationProcess.running) root.write({ resume: r.id }) })
+      Qt.callLater(function() { if (operationProcess.running && !root.refused) root.write({ resume: r.id }) })
     } else if (r.kind === "question" || r.kind === "unreadable") {
       refused = true
       failed = true
