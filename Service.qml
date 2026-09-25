@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import "I18n.js" as I18n
 import "AppNames.js" as AppNames
 import "Builder.js" as Builder
+import "Pick.js" as Pick
 import "Protocol.js" as Protocol
 import "CardsModel.js" as CardsModel
 
@@ -49,6 +50,9 @@ Scope {
   property string builderNotice: ""
   property var namedFaces: null     // a card just made, waiting for its name
   property string pendingName: ""
+  property var pickDraft: null      // the overlay's copy of the draft
+  property int pickFace: 0
+  readonly property bool picking: pickDraft !== null
 
   function pluginPath(relative) {
     var url = String(Qt.resolvedUrl(relative))
@@ -165,6 +169,36 @@ Scope {
     return started
   }
 
+  // -- pick on screen -----------------------------------------------------
+
+  function startPick() {
+    if (!draft || !shell) return
+    pickDraft = draft
+    pickFace = 0
+    builderNotice = ""
+    refreshClients()
+    if (panel) panel.dismiss()
+    shell.summon(pluginId, "{}")
+  }
+
+  function pickToggle(address) {
+    if (!pickDraft) return
+    var r = Pick.toggle(pickDraft, address, pickFace, t)
+    pickDraft = r.draft
+    builderNotice = r.problem
+  }
+
+  function finishPick(apply) {
+    if (!pickDraft) return
+    // Prune against the live client list, not whatever pruneDraft() last
+    // caught: a window can close between its last run and Enter, and
+    // applying a stale pickDraft would resurrect it in the card.
+    if (apply) draft = Builder.prune(pickDraft, clients).draft
+    pickDraft = null
+    if (shell) shell.hide(pluginId)
+    if (panel) panel.reveal()
+  }
+
   function submitDraft() {
     if (!draft) return
     if (!Builder.ready(draft)) { builderNotice = t("Put at least one window on each side."); return }
@@ -178,6 +212,7 @@ Scope {
 
   // A window of the draft closed: it leaves the card, the rest stays.
   function pruneDraft(before) {
+    if (pickDraft) pickDraft = Builder.prune(pickDraft, clients).draft
     if (!draft) return
     var r = Builder.prune(draft, clients)
     if (r.gone.length === 0) return

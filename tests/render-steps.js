@@ -45,6 +45,9 @@ var STEPS = [
   { name: "settings-failed-es", page: "SettingsTab.qml", lang: "es",
     patch: { failed: true, notice: "Hyprflip está ocupado; probá de nuevo en un momento." } },
   { name: "shortcuts-busy-en", page: "ShortcutsPage.qml", lang: "en", patch: { busy: true } },
+  { name: "pick-es", page: "PickView.qml", lang: "es",
+    patch: { pickFace: 0, draft: { mode: "create", card: null, workspace: 3, faces: [["0x1"], ["0x4"]], axes: ["row", "row"],
+                                   visible: 0, floating: null, name: "", cursor: "0x4" } } },
 ]
 
 if (typeof module !== "undefined") module.exports = { STEPS: STEPS }

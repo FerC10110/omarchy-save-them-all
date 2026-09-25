@@ -62,6 +62,7 @@ Item {
     if (k === "f" && draft.cursor) service.place(draft.cursor, 0, -1)
     else if (k === "r" && draft.cursor) service.place(draft.cursor, 1, -1)
     else if (k === "n") nameField.forceActiveFocus()
+    else if (k === "e") service.startPick()
   }
 
   function remove() {
@@ -235,7 +236,7 @@ Item {
     Text {
       Layout.fillWidth: true
       textFormat: Text.PlainText
-      text: host.t("Drag a window onto a side, or pick it with j/k and press f (Front) or r (Back). x takes it out.")
+      text: host.t("Drag a window onto a side, or pick it with j/k and press f (Front) or r (Back). x takes it out; e picks on screen.")
       color: host.dim
       font.family: host.fontFamily
       font.pixelSize: Style.font.caption
@@ -255,6 +256,16 @@ Item {
         onTextEdited: page.service.setDraftName(text)
         onAccepted: page.activate()
         Keys.onEscapePressed: page.forceActiveFocus()
+      }
+
+      Button {
+        text: host.t("Pick on screen")
+        iconText: "󰆿"
+        bordered: true
+        tooltipText: "e"
+        foreground: host.foreground
+        fontFamily: host.fontFamily
+        onClicked: page.service.startPick()
       }
 
       Button {

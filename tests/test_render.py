@@ -81,7 +81,7 @@ class RenderTest(unittest.TestCase):
             'workspace-empty-es': ['Todavía no hay nada guardado para este escritorio.'],
             'workspace-unsettled-es': ['Escritorio 3'],
             'workspace-cards-notice-es': ['Algunas ventanas siguen en un grupo; probá de nuevo'],
-            'builder-new-en': ['New card', 'Front', 'Back', 'Create card', 'Windows', 'kitty · left'],
+            'builder-new-en': ['New card', 'Front', 'Back', 'Create card', 'Windows', 'kitty · left', 'Pick on screen'],
             'builder-edit-es': ['Editar tarjeta', 'Frente', 'Reverso', 'Guardar cambios', 'Cancelar'],
             'builder-notice-es': ['Una cara admite hasta 5 ventanas.', 'Nueva tarjeta', '＋ soltá acá'],
             'cards-en': ['Notes', 'Tiled', 'Front: Calculator', 'Back: Obsidian', 'Flip', 'New card'],
@@ -97,6 +97,7 @@ class RenderTest(unittest.TestCase):
             'shortcuts-es': ['Atajos de teclado', 'Voltear la tarjeta', 'Super+Ctrl+Alt+F'],
             'settings-failed-es': ['Hyprflip está ocupado; probá de nuevo en un momento.'],
             'shortcuts-busy-en': ['Working…'],
+            'pick-es': ['Sumando a: Frente', '2 elegidas', 'Clic en una ventana', 'Reverso'],
         }
         for name, shown in expected.items():
             texts = self.pages[name][1]

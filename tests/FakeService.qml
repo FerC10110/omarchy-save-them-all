@@ -55,6 +55,7 @@ QtObject {
     focusedWorkspace = f.focusedWorkspace || 3
     draft = f.draft === undefined ? null : f.draft
     pickDraft = f.pickDraft === undefined ? draft : f.pickDraft
+    pickFace = f.pickFace || 0
     builderNotice = f.builderNotice || ""
     cardsNotice = f.cardsNotice || ""
     flip.status = f.status || { available: true, reason: "ok" }
@@ -83,4 +84,7 @@ QtObject {
   function startBuilder(card) {}
   function cardAction(action, card) {}
   function setOption(action, extra) {}
+  function startPick() {}
+  function pickToggle(address) {}
+  function finishPick(apply) {}
 }

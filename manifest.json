@@ -8,11 +8,13 @@
   "description": "Save the window layout of a Hyprland workspace and bring it back exactly, on demand or at login: the same apps, the same splits, the same sizes.",
   "kinds": [
     "service",
-    "bar-widget"
+    "bar-widget",
+    "overlay"
   ],
   "entryPoints": {
     "service": "Service.qml",
-    "barWidget": "BarWidget.qml"
+    "barWidget": "BarWidget.qml",
+    "overlay": "PickOverlay.qml"
   },
   "barWidget": {
     "displayName": "Save Them All",
