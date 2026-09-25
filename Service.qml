@@ -71,6 +71,13 @@ Scope {
     Quickshell.execDetached([binDir + "/cards", "name", "--id", String(id), "--name", String(name || "")])
   }
 
+  // "Show both faces": let go of every native group on the workspace.
+  function ungroup(workspace) {
+    if (ungroupProcess.running) return
+    ungroupProcess.command = [binDir + "/cards", "ungroup", "--workspace", String(workspace)]
+    ungroupProcess.running = true
+  }
+
   function refreshClients() {
     if (clientsProcess.running) clientsPending = true
     else clientsProcess.running = true
@@ -149,6 +156,15 @@ Scope {
       if (!root.clientsPending) return
       root.clientsPending = false
       running = true
+    }
+  }
+
+  Process {
+    id: ungroupProcess
+    environment: ({ SAVE_THEM_ALL_LANG: root.lang })
+    onExited: {
+      root.refreshClients()
+      flipConnection.check()
     }
   }
 

@@ -5,13 +5,13 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
+import "I18n.js" as I18n
 
-// The panel is a thin face over the bash scripts in bin/: it shows what is on
-// disk for the workspace you are looking at, runs save / restore, flips which
-// layouts come back at login, and turns on closing the browser cleanly before
-// leaving the session. Everything it knows comes from files the scripts own,
-// so a layout saved from the menu or the terminal shows up here without anyone
-// being told.
+// The panel is a face over the scripts in bin/ and over the plugin's service.
+// It shows tabs (Workspace, and later Cards and Settings) and loads each page
+// with itself as `host`: the pages read state and call actions through it.
+// What it knows about saved layouts comes from files the scripts own, so a
+// layout saved from the menu or a terminal shows up here too.
 Panel {
   id: root
   moduleName: "io.github.ferc10110.save-them-all"
@@ -21,12 +21,11 @@ Panel {
   property var anchorItem: null
   property var hostWidget: null
   property var service: null
-  onServiceChanged: if (service && opened) service.attach(root)
 
   property var record: null
   property string lastError: ""
   property string phase: ""        // "save" | "restore" | ""
-  property var loginRows: []       // [{ workspace, windows, saved_at, autostart }]
+  property var loginRows: []       // [{ workspace, windows, cards, saved_at, autostart }]
   property bool listPending: false
   property var browserQuit: ({ enabled: false, conflict: "" })
   property string browserQuitError: ""
@@ -36,61 +35,49 @@ Panel {
   readonly property int workspaceId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 0
   readonly property string stateDir: Quickshell.env("SAVE_THEM_ALL_STATE") || (Quickshell.env("HOME") + "/.local/state/save-them-all")
   readonly property string statePath: workspaceId > 0 ? stateDir + "/workspace-" + workspaceId + ".json" : ""
-
-  readonly property var savedWindows: record && Array.isArray(record.windows) ? record.windows : []
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color accent: Color.accent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
-  readonly property string summaryText: {
-    if (lastError !== "") return lastError
-    if (phase === "save") return "Saving…"
-    if (phase === "restore") return "Restoring…"
-    if (!hasSaved) return "Nothing saved for this workspace yet."
-    var n = savedWindows.length
-    return n + (n === 1 ? " window" : " windows") + " · saved " + savedAtText
+  // Tabs, in order, and every page by name. Later tasks add entries.
+  readonly property var tabs: ["workspace"]
+  readonly property var pages: ({ workspace: "WorkspaceTab.qml" })
+  property string pageName: "workspace"
+  readonly property bool onTab: tabs.indexOf(pageName) >= 0
+  readonly property bool wide: false
+
+  function t(text, args) { return service ? service.t(text, args) : I18n.t(text, "en", args) }
+
+  function tabLabel(id) {
+    switch (id) {
+    case "workspace": return t("Workspace")
+    default: return id
+    }
   }
 
-  readonly property bool browserQuitBlocked: browserQuit.enabled !== true
-    && (browserQuit.conflict !== "" || browserQuitError !== "")
-
-  readonly property string browserQuitText: {
-    if (browserQuitError !== "") return browserQuitError
-    if (browserQuit.enabled !== true && browserQuit.conflict !== "")
-      return "Your Omarchy menu already changes " + browserQuit.conflict + ", so this stays off."
-    return "Before Logout, Reboot and Shutdown, so it brings its tabs back. Edits the Omarchy menu."
+  function openPage(name) {
+    if (!(name in pages)) return
+    pageName = name
+    page.setSource(pages[name], { host: root })
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
-  readonly property string savedAtText: {
-    if (!record || !record.saved_at) return "earlier"
-    var when = new Date(String(record.saved_at))
-    if (isNaN(when.getTime())) return "earlier"
-    var now = new Date()
-    var sameDay = when.getFullYear() === now.getFullYear()
-      && when.getMonth() === now.getMonth()
-      && when.getDate() === now.getDate()
-    return sameDay ? Qt.formatTime(when, "HH:mm") : Qt.formatDateTime(when, "d MMM HH:mm")
+  function selectTab(index) {
+    if (index >= 0 && index < tabs.length) openPage(tabs[index])
   }
 
-  // Absolute path of a file shipped inside this plugin. Qt resolves it against
-  // the plugin folder, wherever the user installed it, so nothing is hardcoded.
+  function stepTab(direction) {
+    var i = tabs.indexOf(pageName)
+    if (i < 0) return false
+    selectTab((i + direction + tabs.length) % tabs.length)
+    return true
+  }
+
   function pluginPath(relative) {
     var url = String(Qt.resolvedUrl(relative))
     return url.indexOf("file://") === 0 ? decodeURIComponent(url.substring(7)) : url
-  }
-
-  // Window classes are addresses, not names. Chromium names a webapp window
-  // after its URL (chrome-host__some_path-Default), where the host is the part
-  // a person recognises; a reverse-DNS class (org.gnome.Nautilus) carries its
-  // name in the last segment. Anything else is already as readable as it gets.
-  function prettyClass(cls) {
-    var name = String(cls || "")
-    var webapp = name.match(/^chrome-([^_]+)__.*-Default$/)
-    if (webapp) return webapp[1]
-    var parts = name.split(".")
-    if (parts.length >= 3 && parts[parts.length - 1] !== "") return parts[parts.length - 1]
-    return name
   }
 
   function run(phaseName, script) {
@@ -101,14 +88,7 @@ Panel {
     proc.running = true
   }
 
-  function save() {
-    run("save", "save-them-all")
-  }
-
-  // Hyprflip asks for the keyboard back while it works (a "handoff"); the
-  // service shows the panel again when the action ends.
-  function dismiss() { close() }
-  function reveal() { open() }
+  function save() { run("save", "save-them-all") }
 
   function restore() {
     if (!hasSaved) return
@@ -117,6 +97,11 @@ Panel {
     // that is in the way of the thing you asked to look at.
     close()
   }
+
+  // Hyprflip asks for the keyboard back while it works (a "handoff"); the
+  // service shows the panel again when the action ends.
+  function dismiss() { close() }
+  function reveal() { open() }
 
   function refreshLogin() {
     if (listProc.running) listPending = true
@@ -144,26 +129,27 @@ Panel {
   }
 
   function toggleBrowserQuit() {
-    if (quitToggleProc.running || browserQuitBlocked) return
+    var blocked = browserQuit.enabled !== true && (browserQuit.conflict !== "" || browserQuitError !== "")
+    if (quitToggleProc.running || blocked) return
     var on = browserQuit.enabled !== true
     browserQuitError = ""
-    // Flip the switch on screen now; the status read after the write confirms it.
     browserQuit = Object.assign({}, browserQuit, { enabled: on })
     quitToggleProc.command = [pluginPath("bin/close-browser-at-logout"), on ? "--enable" : "--disable"]
     quitToggleProc.running = true
   }
+
+  onServiceChanged: if (service && opened) service.attach(root)
 
   onOpenedChanged: if (opened) {
     if (service) service.attach(root)
     refreshLogin()
     browserQuitError = ""
     refreshBrowserQuit()
+    if (!page.item) openPage(pageName)
   }
 
   Component.onCompleted: refreshLogin()
 
-  // The scripts own the state file, so the panel simply reads whatever is
-  // there — including layouts saved from the menu, a keybinding or a terminal.
   FileView {
     id: stateFile
     path: root.statePath
@@ -197,8 +183,7 @@ Panel {
     onExited: function(exitCode) {
       root.phase = ""
       if (exitCode === 0) root.lastError = ""
-      else if (root.lastError === "") root.lastError = "Something went wrong. Check the notification."
-      // A first save adds a workspace to the login list.
+      else if (root.lastError === "") root.lastError = root.t("Something went wrong. Check the notification.")
       root.refreshLogin()
     }
   }
@@ -229,8 +214,6 @@ Panel {
     onExited: root.refreshLogin()
   }
 
-  // The switch below lives in the user's own menu file, which the script edits
-  // and reads back, so the panel only ever shows what that file says.
   Process {
     id: quitStatusProc
     command: [root.pluginPath("bin/close-browser-at-logout"), "--status"]
@@ -265,18 +248,27 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(320))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(600))
+    contentWidth: panel.fittedContentWidth(root.wide ? Style.space(760) : Style.space(360))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, root.wide ? Style.space(760) : Style.space(640))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      blocked: page.item ? page.item.typing === true : false
+      onCloseRequested: {
+        if (page.item && typeof page.item.back === "function" && page.item.back()) return
+        root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
-      onTextKey: function(t) {
-        var key = String(t).toLowerCase()
-        if (key === "s") root.save()
-        else if (key === "r") root.restore()
+      onMoveRequested: function(dx, dy) {
+        if (page.item && typeof page.item.move === "function" && page.item.move(dx, dy)) return
+        if (dx !== 0) root.stepTab(dx)
+      }
+      onActivateRequested: if (page.item && typeof page.item.activate === "function") page.item.activate()
+      onDeleteRequested: if (page.item && typeof page.item.remove === "function") page.item.remove()
+      onTextKey: function(text) {
+        if (root.onTab && text >= "1" && text <= "9") { root.selectTab(Number(text) - 1); return }
+        if (page.item && typeof page.item.key === "function") page.item.key(String(text))
       }
 
       Flickable {
@@ -297,12 +289,11 @@ Panel {
           PanelHero {
             id: hero
             width: parent.width
+            visible: root.onTab
             title: "Save Them All"
-            meta: root.workspaceId > 0 ? "Workspace " + root.workspaceId : "No workspace"
+            meta: root.workspaceId > 0 ? root.t("Workspace %1", [root.workspaceId]) : root.t("No workspace")
             foreground: root.foreground
             fontFamily: root.fontFamily
-            // `root` inside this Component resolves to PanelHero, not this
-            // Panel, so the icon reads its colors off the hero by id.
             iconComponent: Component {
               Text {
                 text: "󱂬"
@@ -313,149 +304,30 @@ Panel {
             }
           }
 
-          Text {
-            textFormat: Text.PlainText
+          Row {
             width: parent.width
-            text: root.summaryText
-            color: root.lastError !== "" ? root.urgent : root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
-          }
-
-          PanelSeparator {
-            width: parent.width
-            visible: root.savedWindows.length > 0
-            foreground: root.foreground
-          }
-
-          // What is on disk, in the order the layout was saved: left to right,
-          // top to bottom. Seeing the names is how you tell two saves apart.
-          Column {
-            width: parent.width
-            visible: root.savedWindows.length > 0
-            spacing: Style.space(2)
-
-            Repeater {
-              model: root.savedWindows
-
-              Text {
-                required property var modelData
-                textFormat: Text.PlainText
-                width: parent.width
-                text: "· " + root.prettyClass(modelData["class"])
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                elide: Text.ElideRight
-              }
-            }
-          }
-
-          PanelSeparator {
-            width: parent.width
-            foreground: root.foreground
-          }
-
-          ColumnLayout {
-            width: parent.width
-            spacing: Style.space(6)
-
-            Button {
-              Layout.fillWidth: true
-              text: "Save them all"
-              iconText: "󰆓"
-              tooltipText: "Save every window on this workspace (s)"
-              enabled: !root.busy && root.workspaceId > 0
-              leftAlign: true
-              bordered: true
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              iconSpinning: root.phase === "save"
-              onClicked: root.save()
-            }
-
-            Button {
-              Layout.fillWidth: true
-              text: "Restore them all"
-              iconText: "󰑓"
-              tooltipText: root.hasSaved
-                ? "Reopen the saved layout (r)"
-                : "Nothing saved for this workspace yet"
-              enabled: !root.busy && root.hasSaved
-              leftAlign: true
-              bordered: true
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              iconSpinning: root.phase === "restore"
-              onClicked: root.restore()
-            }
-          }
-
-          // Which layouts come back on their own at login: one switch per saved
-          // workspace, all off until you turn one on. The choice lives in each
-          // layout's own file, so saving that workspace again keeps it.
-          PanelSeparator {
-            width: parent.width
-            visible: root.loginRows.length > 0
-            foreground: root.foreground
-          }
-
-          PanelSectionHeader {
-            width: parent.width
-            visible: root.loginRows.length > 0
-            text: "Restore at login"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
-          Column {
-            width: parent.width
-            visible: root.loginRows.length > 0
+            visible: root.onTab && root.tabs.length > 1
             spacing: Style.space(6)
 
             Repeater {
-              model: root.loginRows
+              model: root.tabs
 
-              Toggle {
+              Button {
                 required property var modelData
-                width: parent.width
-                label: "Workspace " + modelData.workspace
-                description: modelData.windows + (modelData.windows === 1 ? " window" : " windows")
-                  + (modelData.workspace === root.workspaceId ? " · this workspace" : "")
-                checked: modelData.autostart === true
+                required property int index
+                text: root.tabLabel(modelData)
+                tooltipText: String(index + 1)
+                selected: root.pageName === modelData
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onClicked: root.toggleLogin(modelData)
+                onClicked: root.openPage(modelData)
               }
             }
           }
 
-          // Omarchy's Logout, Reboot and Shutdown close windows one at a time,
-          // which costs Chromium its tabs. This is the one switch that reaches
-          // outside the plugin's own files, so it starts off and says so.
-          PanelSeparator {
+          Loader {
+            id: page
             width: parent.width
-            foreground: root.foreground
-          }
-
-          PanelSectionHeader {
-            width: parent.width
-            text: "Leaving the session"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
-          Toggle {
-            width: parent.width
-            label: "Close the browser cleanly"
-            description: root.browserQuitText
-            checked: root.browserQuit.enabled === true
-            enabled: !root.browserQuitBlocked
-            opacity: enabled ? 1 : 0.55
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onClicked: root.toggleBrowserQuit()
           }
         }
       }

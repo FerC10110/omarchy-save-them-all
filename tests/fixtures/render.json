@@ -1,0 +1,48 @@
+{
+  "focusedWorkspace": 3,
+  "entries": [
+    {"id": "org.gnome.Calculator.desktop", "name": "Calculator", "icon": "org.gnome.Calculator", "startupClass": "org.gnome.Calculator", "exec": "gnome-calculator"},
+    {"id": "kitty.desktop", "name": "kitty", "icon": "kitty", "startupClass": "kitty", "exec": "kitty"},
+    {"id": "obsidian.desktop", "name": "Obsidian", "icon": "obsidian", "startupClass": "", "exec": "obsidian %u"},
+    {"id": "YouTube.desktop", "name": "YouTube", "icon": "", "startupClass": "", "exec": "omarchy-launch-webapp https://youtube.com/"}
+  ],
+  "clients": [
+    {"address": "0x1", "class": "kitty", "title": "~", "at": [0, 0], "size": [960, 1080], "workspace": {"id": 3, "name": "3"}, "floating": false, "hidden": false, "grouped": [], "fullscreen": 0, "pinned": false, "mapped": true, "monitor": 0, "focusHistoryID": 1},
+    {"address": "0x2", "class": "org.gnome.Calculator", "title": "Calculator", "at": [960, 0], "size": [960, 540], "workspace": {"id": 3, "name": "3"}, "floating": false, "hidden": false, "grouped": ["0x2", "0x3"], "fullscreen": 0, "pinned": false, "mapped": true, "monitor": 0, "focusHistoryID": 2},
+    {"address": "0x3", "class": "obsidian", "title": "Notes", "at": [960, 0], "size": [960, 540], "workspace": {"id": 3, "name": "3"}, "floating": false, "hidden": true, "grouped": ["0x2", "0x3"], "fullscreen": 0, "pinned": false, "mapped": true, "monitor": 0, "focusHistoryID": 5},
+    {"address": "0x4", "class": "kitty", "title": "btop", "at": [960, 540], "size": [960, 540], "workspace": {"id": 3, "name": "3"}, "floating": false, "hidden": false, "grouped": [], "fullscreen": 0, "pinned": false, "mapped": true, "monitor": 0, "focusHistoryID": 3},
+    {"address": "0x5", "class": "chrome-youtube.com__-Default", "title": "YouTube", "at": [0, 0], "size": [1920, 1080], "workspace": {"id": 5, "name": "5"}, "floating": false, "hidden": false, "grouped": [], "fullscreen": 0, "pinned": false, "mapped": true, "monitor": 0, "focusHistoryID": 4}
+  ],
+  "names": {"1": "Notes"},
+  "status": {"available": true, "reason": "ok", "hyprland": "0.56.2", "built_for": "0.56.2", "hyprflip": "0.3.0", "create_faces": true, "detail": "", "fix": ""},
+  "snapshot": {
+    "protocol": 1, "available": true, "error": "",
+    "context": {"instance": "render", "workspace": 3, "anchor": "0x1", "anchor_label": "kitty", "anchor_token": "x"},
+    "capabilities": {"containers": true, "max_panes": 5, "create_faces": true, "unpair": true, "floating": true,
+                     "appearance": true, "spacing": true, "drag_to_add": true},
+    "cards": [
+      {"id": 1, "kind": "container", "key": "container:1", "token": "t1", "current": "0x2", "active": 0,
+       "unfolded": false, "floating": false, "workspace": 3, "name": "Calculator ↔ Obsidian",
+       "faces": [{"index": 0, "axis": "horizontal", "panes": [{"address": "0x2", "label": "Calculator"}]},
+                 {"index": 1, "axis": "horizontal", "panes": [{"address": "0x3", "label": "Obsidian"}]}]}
+    ],
+    "transition": "flip", "transition_modes": ["flip", "vertical", "slide", "fade", "instant"],
+    "duration_ms": 420, "appearance": "classic", "card_gap": -1,
+    "shortcuts": {"available": true,
+      "rows": [{"id": "flip", "label": "Voltear tarjeta", "mask": 76, "key": "F", "default_mask": 76, "default_key": "F", "shortcut": "Super+Ctrl+Alt+F", "editable": true},
+               {"id": "peek", "label": "Echar un vistazo", "mask": 76, "key": "P", "default_mask": 76, "default_key": "P", "shortcut": "Super+Ctrl+Alt+P", "editable": true}],
+      "occupied": [{"id": "flip", "mask": 76, "key": "F", "keycode": 0, "submap": "", "universal": false, "label": "Voltear tarjeta"},
+                   {"id": null, "mask": 64, "key": "RETURN", "keycode": 0, "submap": "", "universal": false, "label": "Terminal"}]}
+  },
+  "record": {
+    "workspace": 3, "monitor": "DP-1", "saved_at": "2026-09-25T11:59:00-03:00", "autostart": true,
+    "windows": [
+      {"class": "kitty", "title": "~", "launch": {"kind": "terminal"}, "at": [0, 0], "size": [960, 1080], "floating": false},
+      {"class": "org.gnome.Calculator", "title": "Calculator", "launch": {"kind": "app", "desktop": "org.gnome.Calculator.desktop"}, "at": [960, 0], "size": [960, 540], "floating": false},
+      {"class": "obsidian", "title": "Notes", "launch": {"kind": "app", "desktop": "obsidian.desktop"}, "at": [960, 0], "size": [960, 540], "floating": false}
+    ],
+    "cards": [{"name": "Notes", "faces": [{"windows": [1], "axis": "row", "ratios": [1.0]}, {"windows": [2], "axis": "row", "ratios": [1.0]}], "visible": 0, "floating": null}]
+  },
+  "loginRows": [{"workspace": 3, "windows": 3, "cards": 1, "saved_at": "2026-09-25T11:59:00-03:00", "autostart": true},
+                {"workspace": 5, "windows": 1, "cards": 0, "saved_at": "2026-09-24T09:00:00-03:00", "autostart": false}]
+}
