@@ -6,6 +6,9 @@
     cards capture  --workspace N --addresses A   the workspace's cards, as indices into the saved windows
     cards preserve --previous F --windows W      the previous save's cards, moved onto the windows saved now
     cards name     --id N --name TEXT            remember a card's name for this Hyprland session
+    cards layout   --file F --addresses A        which windows wait outside the tree, and each card's place
+    cards fallback --file F --addresses A        build the saved cards as native Hyprland groups
+    cards ungroup  --workspace N                 let go of every native group on the workspace
 
 Every command prints one JSON value. A (--addresses) is a JSON list aligned
 with the windows of a workspace file: each window's address, or null when it
@@ -32,6 +35,8 @@ MESSAGES = Path(__file__).resolve().parent / 'messages.es.json'
 ADDRESS = re.compile(r'^0x[0-9a-f]{1,16}$')
 AXES = {'horizontal': 'row', 'vertical': 'column'}
 MAX_PANES = 5
+PARKING = 'special:savethemall'   # the same hidden workspace restore-them-all parks windows on
+PAUSE = float(os.environ.get('SAVE_THEM_ALL_PAUSE') or 0.25)
 COMMANDS = {}
 
 
@@ -579,6 +584,145 @@ def preserve(args):
         else:
             notes.append(msg('Card %1 was not kept: some of its windows are no longer saved', saved_title(card, old)))
     return {'cards': kept, 'notes': notes}
+
+
+# -- restoring: the place of each card --------------------------------------
+
+def rect(win):
+    try:
+        (x, y), (w, h) = win['at'], win['size']
+    except (KeyError, TypeError, ValueError):
+        return None
+    return (x, y, w, h) if all(whole(v) for v in (x, y, w, h)) else None
+
+
+@command('layout')
+def layout(args):
+    """In the tree, a card takes one place: the one of its slot (its front's
+    first open window), as large as the side that was showing. Its other
+    windows wait outside the tree; a floating card keeps all of them out."""
+    windows, cards, problem = read_file(Path(args.file or ''))
+    addresses = addresses_arg(args)
+    hide, slots = [], []
+    if problem:
+        return {'hide': [], 'slots': []}
+    for card in cards:
+        faces = [[i for i in f['windows'] if i < len(addresses) and addresses[i]] for f in card['faces']]
+        if not all(faces):
+            continue   # it will not be built: its windows stay in the tree
+        members = faces[0] + faces[1]
+        if card['floating'] is not None:
+            hide += members
+            continue
+        slot = faces[0][0]
+        rects = [r for r in (rect(windows[i]) for i in faces[card['visible']]) if r] or \
+            [r for r in (rect(windows[slot]),) if r]
+        if rects:
+            x0, y0 = min(r[0] for r in rects), min(r[1] for r in rects)
+            x1, y1 = max(r[0] + r[2] for r in rects), max(r[1] + r[3] for r in rects)
+            slots.append({'i': slot, 'at': [x0, y0], 'size': [x1 - x0, y1 - y0]})
+        hide += [i for i in members if i != slot]
+    return {'hide': sorted(hide), 'slots': slots}
+
+
+# -- restoring without Hyprflip: native groups ----------------------------------
+
+def build_group(card, faces, ws, now):
+    """One card as a native group in its slot: every window a tab, the
+    visible side's first window in front, floating where it was."""
+    members = faces[0] + faces[1]
+    slot, shown = faces[0][0], faces[card['visible']][0]
+    for a in members:
+        if now[a].get('floating'):
+            # Tiled first: Hyprflip's own helper un-floats with action = "disable".
+            dispatch(f"hl.dsp.window.float({{ window = 'address:{a}', action = 'disable' }})")
+    dispatch(focus(slot))
+    dispatch('hl.dsp.group.toggle()')
+    current = slot
+    for m in members:
+        if m == slot:
+            continue
+        # Out, and back in to the right of the group; then into the group on
+        # its left. A window joins the group next to it: this makes it ours.
+        dispatch(move_to(m, PARKING))
+        time.sleep(PAUSE)
+        dispatch(focus(current))
+        dispatch("hl.dsp.layout('preselect r')")
+        dispatch(move_to(m, ws))
+        time.sleep(PAUSE)
+        dispatch(focus(m))
+        dispatch("hl.dsp.window.move({ into_group = 'l' })")
+        current = m
+    group = clients().get(slot, {}).get('grouped') or []
+    if sorted(group) != sorted(members):
+        raise CardsError(msg('the group came out with %1 of its %2 windows', len(group), len(members)))
+    # Focus is on the group (its last tab); bring the visible side forward.
+    dispatch(f'hl.dsp.group.active({{ index = {group.index(shown) + 1} }})')
+    if card['floating'] is not None:
+        (x, y), (w, h) = card['floating']['at'], card['floating']['size']
+        dispatch(f"hl.dsp.window.float({{ window = 'address:{shown}', state = 'on' }})")
+        dispatch(f"hl.dsp.window.resize({{ window = 'address:{shown}', x = {w}, y = {h}, exact = true }})")
+        dispatch(f"hl.dsp.window.move({{ window = 'address:{shown}', x = {x}, y = {y}, exact = true }})")
+
+
+def fallback_cards(filename, windows, cards, problem, addresses, notes=None):
+    result = {'built': 0, 'kept': 0, 'notes': list(notes or [])}
+    if problem:
+        result['notes'].append(note(msg('Cards in %1 were ignored: %2', filename, problem)))
+        return result
+    try:
+        ws = active_workspace()
+    except HyprError as error:
+        result['notes'].append(note(msg('Cards were not rebuilt: %1', error)))
+        return result
+    for card in cards:
+        title = saved_title(card, windows)
+        faces = present(card, addresses)
+        if not all(faces):
+            result['notes'].append(note(msg('Card %1 was not rebuilt: one of its sides has none of its windows open', title)))
+            continue
+        members = faces[0] + faces[1]
+        try:
+            now = clients()
+            groups = [now.get(a, {}).get('grouped') or [] for a in members]
+            if all(sorted(g) == sorted(members) for g in groups):
+                result['kept'] += 1
+                continue
+            busy = next((a for a, g in zip(members, groups) if g), None)
+            if busy:
+                result['notes'].append(note(msg('Card %1 was left as it is: %2 is already in a card or group',
+                                                title, app_name(now[busy].get('class')))))
+                continue
+            build_group(card, faces, ws, now)
+            result['built'] += 1
+        except CardsError as error:
+            result['notes'].append(note(msg('Card %1 could not be grouped: %2', title, error)))
+    return result
+
+
+@command('fallback')
+def fallback(args):
+    path = Path(args.file or '')
+    windows, cards, problem = read_file(path)
+    return fallback_cards(path.name, windows, cards, problem, addresses_arg(args))
+
+
+@command('ungroup')
+def ungroup(args):
+    """Let go of every native group on the workspace: the windows of a card
+    Hyprflip can no longer flip come back as plain tiles."""
+    ws = workspace_arg(args)
+    released = 0
+    for _ in range(64):
+        grouped = [c for c in clients().values()
+                   if c.get('workspace', {}).get('id') == ws and c.get('grouped')]
+        if not grouped:
+            return {'released': released}
+        shown = next((c for c in grouped if not c.get('hidden')), grouped[0])
+        dispatch(focus(shown['address']))
+        dispatch('hl.dsp.window.move({ out_of_group = true })')
+        released += 1
+    raise CardsError(msg('Some windows are still in a group; try again'))
 
 
 def main(argv=None):

@@ -71,6 +71,8 @@ def apply(expr):
         clients[m[1]]['at'] = [int(m[2]), int(m[3])]
     elif m := re.fullmatch(r"hl\.dsp\.window\.float\(\{ window = '" + ADDR + r"', state = 'on' \}\)", expr):
         clients[m[1]]['floating'] = True
+    elif m := re.fullmatch(r"hl\.dsp\.window\.float\(\{ window = '" + ADDR + r"', action = 'disable' \}\)", expr):
+        clients[m[1]]['floating'] = False
     elif expr == 'hl.dsp.group.toggle()' and active in clients:
         if clients[active].get('grouped'):
             dissolve(clients[active]['grouped'])

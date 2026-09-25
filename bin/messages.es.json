@@ -42,5 +42,12 @@
   "Card %1 was not kept: some of its windows are no longer saved": "La tarjeta %1 no se conservó: algunas de sus ventanas ya no se guardan",
   "Hyprflip did not answer; the cards saved before were kept": "Hyprflip no respondió; se conservaron las tarjetas guardadas antes",
   "Saved %1 windows and 1 card from workspace %2": "Se guardaron %1 ventanas y 1 tarjeta del escritorio %2",
-  "Saved %1 windows and %2 cards from workspace %3": "Se guardaron %1 ventanas y %2 tarjetas del escritorio %3"
+  "Saved %1 windows and %2 cards from workspace %3": "Se guardaron %1 ventanas y %2 tarjetas del escritorio %3",
+  "the group came out with %1 of its %2 windows": "el grupo quedó con %1 de sus %2 ventanas",
+  "Cards in %1 were ignored: %2": "Se ignoraron las tarjetas de %1: %2",
+  "Cards were not rebuilt: %1": "No se rearmaron las tarjetas: %1",
+  "Card %1 was not rebuilt: one of its sides has none of its windows open": "La tarjeta %1 no se rearmó: una de sus caras no tiene ninguna ventana abierta",
+  "Card %1 was left as it is: %2 is already in a card or group": "La tarjeta %1 quedó como estaba: %2 ya está en una tarjeta o grupo",
+  "Card %1 could not be grouped: %2": "La tarjeta %1 no se pudo agrupar: %2",
+  "Some windows are still in a group; try again": "Algunas ventanas siguen en un grupo; probá de nuevo"
 }
