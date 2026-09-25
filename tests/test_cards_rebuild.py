@@ -3,7 +3,7 @@ helper. A helper that fails or hangs never stops the rest."""
 import json
 import time
 
-from scripttest import ScriptTest, client, flip, saved_window
+from scripttest import ScriptTest, client, container, flip, saved_window
 
 W = [saved_window('kitty', (0, 0), (960, 1080), None),
      saved_window('org.gnome.Calculator', (960, 0), (960, 1080), None),
@@ -88,3 +88,76 @@ class RebuildTest(ScriptTest):
         self.assertTrue(out['notes'][0].startswith('Cards were grouped as tabs instead: '), out['notes'])
         self.assertEqual(self.helper_requests(), [])
         self.assertEqual(sorted(self.clients_by_address()['0x2']['grouped']), ['0x2', '0x3', '0x4'])
+
+    def test_a_helper_without_a_container_provider_falls_back_to_groups(self):
+        # create_faces can be advertised true even with no container
+        # provider at all (the fork's own quirk) -- containers=false must
+        # gate the create path off on its own, same as create_faces=false.
+        self.helper_config(containers=False)
+        out = self.rebuild()
+        self.assertEqual(out['built'], 1)
+        self.assertTrue(out['notes'][0].startswith('Cards were grouped as tabs instead: '), out['notes'])
+        self.assertEqual(self.helper_requests(), [])
+        self.assertEqual(sorted(self.clients_by_address()['0x2']['grouped']), ['0x2', '0x3', '0x4'])
+
+    def test_a_helper_on_another_protocol_falls_back_to_groups(self):
+        self.helper_config(protocol=2)
+        out = self.rebuild()
+        self.assertEqual(out['built'], 1)
+        self.assertTrue(out['notes'][0].startswith('Cards were grouped as tabs instead: '), out['notes'])
+        self.assertEqual(self.helper_requests(), [])
+        self.assertEqual(sorted(self.clients_by_address()['0x2']['grouped']), ['0x2', '0x3', '0x4'])
+
+    def test_a_card_too_big_for_the_containers_falls_back_only_for_that_card(self):
+        # container_max_panes = 1 (e.g. no container provider, just
+        # create_faces + containers advertised true): CARD's back (2
+        # windows) does not fit, but a plain 1-vs-1 card still does, in the
+        # same rebuild call -- the gate is per card, not per file.
+        self.helper_config(max_panes=1)
+        state = self.hypr()
+        state['clients'].append(client('0x5', 'firefox'))
+        self.hypr_state(**state)
+        windows = W + [saved_window('firefox', (0, 0), (480, 1080), None)]
+        small = {'name': '', 'faces': [{'windows': [0], 'axis': 'row', 'ratios': [1.0]},
+                                       {'windows': [4], 'axis': 'row', 'ratios': [1.0]}],
+                'visible': 0, 'floating': None}
+        path = self.write_saved(3, windows, cards=[CARD, small])
+        out = self.cards_json('rebuild', '--file', str(path), '--addresses',
+                              json.dumps(['0x1', '0x2', '0x3', '0x4', '0x5']))
+        self.assertEqual(out['built'], 2)
+        [request] = self.helper_requests()
+        self.assertEqual(request['faces'], [['address:0x1'], ['address:0x5']])
+        self.assertEqual(sorted(self.clients_by_address()['0x2']['grouped']), ['0x2', '0x3', '0x4'])
+
+    def test_a_busy_address_missing_from_clients_does_not_crash(self):
+        # 0x2 is a member of an existing (stale) container but has since
+        # closed: absent from `clients()`. Finding it "busy" must not
+        # KeyError trying to read its class for the note.
+        state = self.hypr()
+        state['hyprflip']['containers'] = [container(1, [['0x2'], ['0x9']])]
+        state['clients'] = [c for c in state['clients'] if c['address'] != '0x2']
+        self.hypr_state(**state)
+        out = self.rebuild()
+        self.assertEqual(out['built'], 0)
+        self.assertTrue(out['notes'], out)
+        self.assertEqual(self.helper_requests(), [])
+
+    def test_a_naming_failure_does_not_stop_the_rebuild(self):
+        # The card itself was built fine; only saving its name fails (e.g.
+        # an unwritable runtime dir) -- that must not lose the build, nor
+        # stop the next card in the same call.
+        state = self.hypr()
+        state['clients'].append(client('0x5', 'firefox'))
+        self.hypr_state(**state)
+        windows = W + [saved_window('firefox', (0, 0), (480, 1080), None)]
+        second = {'name': '', 'faces': [{'windows': [0], 'axis': 'row', 'ratios': [1.0]},
+                                        {'windows': [4], 'axis': 'row', 'ratios': [1.0]}],
+                 'visible': 0, 'floating': None}
+        path = self.write_saved(3, windows, cards=[dict(CARD, name='Trading'), second])
+        blocked = self.tmp / 'blocked'
+        blocked.write_text('not a directory')
+        out = self.cards_json('rebuild', '--file', str(path), '--addresses',
+                              json.dumps(['0x1', '0x2', '0x3', '0x4', '0x5']),
+                              env={'SAVE_THEM_ALL_RUNTIME': str(blocked)})
+        self.assertEqual(out['built'], 2)
+        self.assertTrue(any('name could not be saved' in n for n in out['notes']), out['notes'])

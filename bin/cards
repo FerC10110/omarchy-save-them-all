@@ -183,6 +183,27 @@ def helper_snapshot():
     return value
 
 
+def helper_can_create(snapshot):
+    """Whether a helper snapshot supports building cards at all with
+    `create`: the same protocol and availability checks `status` makes,
+    plus both container capabilities. A stale provider can advertise
+    `create_faces` true with no container provider at all
+    (`capabilities.containers` false) -- see the Hyprflip fork's
+    scripts/control.py, where that also caps every container at 1 pane
+    regardless of `create_faces`."""
+    caps = snapshot.get('capabilities') or {}
+    return (snapshot.get('protocol') == 1 and bool(snapshot.get('available'))
+            and bool(caps.get('create_faces')) and bool(caps.get('containers')))
+
+
+def helper_max_panes(snapshot):
+    """The largest side (in windows) a single container can hold, from the
+    helper's snapshot -- 2 if the field is missing, the same default
+    scripts/workflow.py itself falls back to when validating a recipe."""
+    value = (snapshot.get('capabilities') or {}).get('max_panes')
+    return value if type(value) in (int, float) else 2
+
+
 def built_for():
     try:
         text = (SOURCE / 'build' / 'CMakeCache.txt').read_text(errors='replace')
@@ -837,17 +858,30 @@ def rebuild(args):
         snapshot = helper_snapshot()
     except CardsError as error:
         snapshot = {'error': str(error)}
-    if not snapshot.get('available') or not (snapshot.get('capabilities') or {}).get('create_faces'):
+    if not helper_can_create(snapshot):
         why = (msg('the Hyprflip helper cannot build whole cards; update it') if snapshot.get('available')
                else snapshot.get('error') or msg('Hyprflip is not available'))
         return fallback_cards(path.name, windows, cards, '', addresses,
                               [note(msg('Cards were grouped as tabs instead: %1', why))])
+    limit = helper_max_panes(snapshot)
     result = {'built': 0, 'kept': 0, 'notes': []}
     for card in cards:
         title = saved_title(card, windows)
         faces = present(card, addresses)
         if not all(faces):
             result['notes'].append(note(msg('Card %1 was not rebuilt: one of its sides has none of its windows open', title)))
+            continue
+        if max(len(f) for f in faces) > limit:
+            # This card's own snapshot check passed (create_faces, containers)
+            # but its largest side does not fit the helper's own container
+            # limit (e.g. no real container provider: max_panes defaults to
+            # 1) -- fall back to a native group for this one card, not the
+            # whole file: another card may still fit.
+            sub = fallback_cards(path.name, windows, [card], '', addresses,
+                                 [note(msg('Card %1 was grouped as tabs instead: it has more windows on a side than the helper supports', title))])
+            result['built'] += sub['built']
+            result['kept'] += sub['kept']
+            result['notes'] += sub['notes']
             continue
         members = faces[0] + faces[1]
         try:
@@ -863,7 +897,7 @@ def rebuild(args):
         busy = next((a for a in members if a in owned or now.get(a, {}).get('grouped')), None)
         if busy:
             result['notes'].append(note(msg('Card %1 was left as it is: %2 is already in a card or group',
-                                            title, app_name(now[busy].get('class')))))
+                                            title, app_name(now.get(busy, {}).get('class')))))
             continue
         try:
             context = helper_snapshot().get('context')
@@ -888,7 +922,10 @@ def rebuild(args):
             except CardsError:
                 new = None
             if new:
-                set_name(new['id'], card['name'])
+                try:
+                    set_name(new['id'], card['name'])
+                except OSError as error:
+                    result['notes'].append(note(msg('Card %1 was rebuilt, but its name could not be saved: %2', title, error)))
     return result
 
 

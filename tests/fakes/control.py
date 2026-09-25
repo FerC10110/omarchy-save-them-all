@@ -3,6 +3,7 @@
 
 FAKE_HELPER_STATE (JSON, optional) sets how it behaves:
   protocol (1), available (true), error (""), create_faces (true),
+  containers (true), max_panes (5),
   outcome: "done" | "error" | "hang" | "garbage" (default "done"), message.
 Every run request is appended to FAKE_LOG as {"helper": request}. A done
 create adds the card to the fake Hyprland state, as Hyprflip would: one
@@ -75,7 +76,7 @@ def main():
             'context': {'instance': 'save-them-all-test', 'workspace': state.get('active_workspace'),
                         'anchor': None, 'anchor_label': None, 'anchor_token': None},
             'capabilities': {'create_faces': cfg.get('create_faces', True), 'unpair': True,
-                             'containers': True, 'max_panes': 5},
+                             'containers': cfg.get('containers', True), 'max_panes': cfg.get('max_panes', 5)},
             'cards': [], 'shortcuts': {'available': False, 'rows': [], 'occupied': []}}))
         return 0
     request = json.loads(sys.argv[sys.argv.index('--request') + 1])

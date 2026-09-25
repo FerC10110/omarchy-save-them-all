@@ -56,5 +56,7 @@
   "the Hyprflip helper cannot build whole cards; update it": "el asistente de Hyprflip no puede armar tarjetas enteras; actualizalo",
   "Hyprflip is not available": "Hyprflip no está disponible",
   "Cards were grouped as tabs instead: %1": "Las tarjetas se agruparon como pestañas: %1",
-  "Card %1 could not be rebuilt: %2": "La tarjeta %1 no se pudo rearmar: %2"
+  "Card %1 could not be rebuilt: %2": "La tarjeta %1 no se pudo rearmar: %2",
+  "Card %1 was grouped as tabs instead: it has more windows on a side than the helper supports": "La tarjeta %1 se agrupó como pestañas: tiene más ventanas de un lado de las que soporta el asistente",
+  "Card %1 was rebuilt, but its name could not be saved: %2": "La tarjeta %1 se rearmó, pero no se pudo guardar su nombre: %2"
 }
