@@ -54,6 +54,15 @@ class MembersTest(ScriptTest):
                      client('0x8', 'c', ws=4), client('0x9', 'd', ws=4, hidden=True)])
         self.assertEqual(self.cards_json('members', '--workspace', '3'), ['0x2', '0x3'])
 
+    def test_a_window_titled_like_a_lua_error_does_not_break_hyprctl(self):
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip([container(1, [['0x2'], ['0x3']])]),
+            clients=[client('0x2', 'a', title='Lua error in hyprland.lua - a'),
+                     client('0x3', 'b', hidden=True)])
+        self.assertEqual(self.cards_json('members', '--workspace', '3'), ['0x2', '0x3'])
+        out = self.cards_json('capture', '--workspace', '3', '--addresses', json.dumps(['0x2', '0x3']))
+        self.assertEqual(out['cards'][0]['faces'], [{'windows': [0], 'axis': 'row', 'ratios': [1.0]},
+                                                     {'windows': [1], 'axis': 'row', 'ratios': [1.0]}])
+
     def test_without_hyprflip_hidden_windows_of_a_saved_card(self):
         previous = self.write_saved(3, [saved_window('kitty', (0, 0), (960, 1080), {'kind': 'terminal'}),
                                         saved_window('org.gnome.Calculator', (960, 0), (960, 1080), CALC),

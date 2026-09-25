@@ -111,8 +111,12 @@ def hyprctl(*args):
     except (OSError, subprocess.TimeoutExpired) as error:
         raise HyprError(str(error)) from error
     reply = done.stdout.strip()
-    if done.returncode or reply.startswith('error') or 'Lua error' in reply:
-        raise HyprError(reply or done.stderr.strip() or 'hyprctl ' + ' '.join(args))
+    # The 'error'/'Lua error' text check only makes sense for hyprctl's plain
+    # (non -j) replies: a -j reply is JSON data (e.g. a window's title) that
+    # may contain that text without hyprctl itself having failed.
+    plain = not (args and args[0] == '-j')
+    if done.returncode or (plain and (reply.startswith('error') or 'Lua error' in reply)):
+        raise HyprError((reply or done.stderr.strip() or 'hyprctl ' + ' '.join(args))[:200])
     return reply
 
 
