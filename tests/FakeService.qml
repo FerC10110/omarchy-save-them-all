@@ -29,6 +29,10 @@ QtObject {
     property var t: function(text, args) { return fake.t(text, args) }
     property var status: ({ available: true, reason: "ok" })
     property var snapshot: Protocol.emptySnapshot()
+    // Real Hyprflip.qml: true once status and (if it says available) the
+    // first snapshot came back. Defaults true here; a step patches it false
+    // to render the moment right after attach(), before either has landed.
+    property bool settled: true
     readonly property bool available: status.available === true && snapshot.available === true
     readonly property bool canCreate: available && snapshot.capabilities.create_faces === true
     readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
@@ -55,6 +59,7 @@ QtObject {
     cardsNotice = f.cardsNotice || ""
     flip.status = f.status || { available: true, reason: "ok" }
     flip.snapshot = Protocol.parseSnapshot(JSON.stringify(f.snapshot || {})).snapshot
+    flip.settled = f.settled === false ? false : true
     flip.busy = f.busy === true
     flip.notice = f.notice || ""
     flip.failed = f.failed === true

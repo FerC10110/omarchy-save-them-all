@@ -13,8 +13,12 @@ Column {
   readonly property var record: host.record
   readonly property var windows: record && Array.isArray(record.windows) ? record.windows : []
   readonly property int cardCount: record && Array.isArray(record.cards) ? record.cards.length : 0
+  // Only say cards are paused once Hyprflip has a verdict (Task 11 review):
+  // right after attach(), the status/snapshot are still placeholders, and
+  // showing the warning (and a live "Show both faces") on that guess would
+  // ungroup perfectly healthy cards.
   readonly property bool cardsPaused: cardCount > 0 && service !== null
-    && service.flip.status.reason !== "" && !service.flip.available
+    && service.flip.settled === true && !service.flip.available
   spacing: Style.space(10)
 
   function key(text) {
@@ -52,6 +56,19 @@ Column {
     width: parent.width
     text: tab.summaryText
     color: host.lastError !== "" ? host.urgent : host.dim
+    font.family: host.fontFamily
+    font.pixelSize: Style.font.bodySmall
+    wrapMode: Text.WordWrap
+  }
+
+  // What bin/cards last said about an action outside a card, translated
+  // (e.g. "Show both faces" could not release every window).
+  Text {
+    textFormat: Text.PlainText
+    width: parent.width
+    visible: tab.service && tab.service.cardsNotice !== ""
+    text: tab.service ? tab.service.cardsNotice : ""
+    color: host.urgent
     font.family: host.fontFamily
     font.pixelSize: Style.font.bodySmall
     wrapMode: Text.WordWrap

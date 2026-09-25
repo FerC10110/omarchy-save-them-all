@@ -7,6 +7,13 @@ var STEPS = [
   { name: "workspace-paused-es", page: "WorkspaceTab.qml", lang: "es",
     patch: { status: { available: false, reason: "no-plugin", fix: "cd ~/.local/src/hyprflip-omacards && make" } } },
   { name: "workspace-empty-es", page: "WorkspaceTab.qml", lang: "es", patch: { record: null, loginRows: [] } },
+  // Hyprflip's status is ok but its first snapshot has not come back yet: no
+  // verdict, so no false "cards paused" warning and no live ungroup button.
+  { name: "workspace-unsettled-es", page: "WorkspaceTab.qml", lang: "es", patch: { settled: false } },
+  // bin/cards ungroup failed (windows still grouped after 64 tries): the
+  // Workspace tab shows what the script said, translated.
+  { name: "workspace-cards-notice-es", page: "WorkspaceTab.qml", lang: "es",
+    patch: { cardsNotice: "Algunas ventanas siguen en un grupo; probá de nuevo" } },
 ]
 
 if (typeof module !== "undefined") module.exports = { STEPS: STEPS }

@@ -59,6 +59,12 @@ Panel {
 
   function openPage(name) {
     if (!(name in pages)) return
+    // Already showing it (e.g. h/l or its digit with nothing to switch to):
+    // do not reload the page, or a later page's own state would be lost.
+    if (name === pageName && page.item) {
+      Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+      return
+    }
     pageName = name
     page.setSource(pages[name], { host: root })
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })

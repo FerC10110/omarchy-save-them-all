@@ -79,8 +79,24 @@ class RenderTest(unittest.TestCase):
             'workspace-es': ['Guardar todas', 'Restaurar todas', 'Restaurar al iniciar', 'Escritorio 3'],
             'workspace-paused-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
             'workspace-empty-es': ['Todavía no hay nada guardado para este escritorio.'],
+            'workspace-unsettled-es': ['Escritorio 3'],
+            'workspace-cards-notice-es': ['Algunas ventanas siguen en un grupo; probá de nuevo'],
         }
         for name, shown in expected.items():
             texts = self.pages[name][1]
             for text in shown:
                 self.assertTrue(any(text in t for t in texts), f'{name}: {text!r} not in {texts}')
+
+    def test_pages_do_not_show_a_cards_paused_warning_without_a_verdict(self):
+        # Hyprflip ok (workspace-es), no saved cards (workspace-empty-es), and
+        # status ok but no snapshot yet (workspace-unsettled-es): none of them
+        # has grounds to say cards are paused.
+        hidden = {
+            'workspace-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
+            'workspace-empty-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
+            'workspace-unsettled-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
+        }
+        for name, unshown in hidden.items():
+            texts = self.pages[name][1]
+            for text in unshown:
+                self.assertFalse(any(text in t for t in texts), f'{name}: {text!r} found in {texts}')

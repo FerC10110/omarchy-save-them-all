@@ -25,7 +25,15 @@ Scope {
   property var status: ({ available: false, reason: "", fix: "", detail: "", hyprland: "", built_for: "", hyprflip: "" })
   property var snapshot: Protocol.emptySnapshot()
   property string snapshotProblem: ""
+  // A real answer has replaced the placeholders above: the status came
+  // back, and, once it says Hyprflip is available, so did a first snapshot.
+  property bool statusChecked: false
+  property bool snapshotChecked: false
   readonly property bool available: status.available === true && snapshot.available === true && snapshotProblem === ""
+  // Whether "available" is actually known yet, not still a guess from the
+  // placeholders: nothing that reads Hyprflip as absent should say so before
+  // this is true, or it is reporting on data that has not arrived.
+  readonly property bool settled: statusChecked && (status.available !== true || snapshotChecked)
   readonly property bool canCreate: available && snapshot.capabilities.create_faces === true
   readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
   readonly property string unavailableText: {
@@ -117,6 +125,7 @@ Scope {
     var parsed = Protocol.parseSnapshot(text)
     snapshot = parsed.snapshot
     snapshotProblem = parsed.problem
+    snapshotChecked = true
     if (!pending) return
     if (!available) { fail(unavailableText); return }
     var o = pending.options
@@ -179,6 +188,7 @@ Scope {
         } catch (e) {
           root.status = { available: false, reason: "helper", detail: String(text || "").trim().slice(0, 200) }
         }
+        root.statusChecked = true
         if (root.status.available === true) root.refresh()
       }
     }
