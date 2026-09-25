@@ -39,6 +39,12 @@ var STEPS = [
   { name: "settings-unavailable-es", page: "SettingsTab.qml", lang: "es",
     patch: { status: { available: false, reason: "mismatch", hyprland: "0.57.0", built_for: "0.56.2", fix: "make" } } },
   { name: "shortcuts-es", page: "ShortcutsPage.qml", lang: "es", patch: {} },
+  // setOption()/save() now leave a notice instead of dropping a refused
+  // action silently (Task 15 fix round 1): both pages show it the way
+  // CardsTab shows cardAction's result.
+  { name: "settings-failed-es", page: "SettingsTab.qml", lang: "es",
+    patch: { failed: true, notice: "Hyprflip está ocupado; probá de nuevo en un momento." } },
+  { name: "shortcuts-busy-en", page: "ShortcutsPage.qml", lang: "en", patch: { busy: true } },
 ]
 
 if (typeof module !== "undefined") module.exports = { STEPS: STEPS }

@@ -153,12 +153,20 @@ Panel {
 
   onServiceChanged: if (service && opened) service.attach(root)
 
-  onOpenedChanged: if (opened) {
-    if (service) service.attach(root)
-    refreshLogin()
-    browserQuitError = ""
-    refreshBrowserQuit()
-    if (!page.item) openPage(pageName)
+  onOpenedChanged: {
+    if (opened) {
+      if (service) service.attach(root)
+      refreshLogin()
+      browserQuitError = ""
+      refreshBrowserQuit()
+      if (!page.item) openPage(pageName)
+    } else if (page.item && typeof page.item.stopRecording === "function") {
+      // The panel can close mid-recording (a click outside, or Hyprflip's
+      // dismiss() handoff): stop it here too, or the ShortcutInhibitor
+      // would re-engage on reopen with focus on the (blocked) keyCatcher,
+      // swallowing every key including Esc.
+      page.item.stopRecording()
+    }
   }
 
   Component.onCompleted: refreshLogin()

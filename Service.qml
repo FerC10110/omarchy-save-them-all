@@ -157,10 +157,12 @@ Scope {
   }
 
   // One of Hyprflip's preferences (appearance, spacing, transition,
-  // duration, shortcut): they apply to every card.
+  // duration, shortcut): they apply to every card. -> whether it was sent.
   function setOption(action, extra) {
     cardsNotice = ""
-    flipConnection.run(action, extra, { reopen: true })
+    var started = flipConnection.run(action, extra, { reopen: true })
+    if (!started) cardsNotice = t("Hyprflip is busy; try again in a moment.")
+    return started
   }
 
   function submitDraft() {

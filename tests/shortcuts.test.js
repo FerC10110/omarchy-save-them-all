@@ -47,3 +47,14 @@ test("every Hyprflip shortcut and transition has our own label", () => {
   assert.deepEqual(Labels.transitions(modes).map(x => x.value), modes)
   assert.deepEqual(Labels.transitions(["instant", "flip", "warp"]).map(x => x.value), ["flip", "instant"])
 })
+
+test("step walks a row list by id, clamped, and starts at the first row", () => {
+  const rows = [{ id: "a" }, { id: "b" }, { id: "c" }]
+  assert.equal(Labels.step(rows, "", 0), "a")
+  assert.equal(Labels.step(rows, "gone", 1), "a")
+  assert.equal(Labels.step(rows, "a", 1), "b")
+  assert.equal(Labels.step(rows, "c", 1), "c")
+  assert.equal(Labels.step(rows, "a", -1), "a")
+  assert.equal(Labels.step(rows, "b", 0), "b")
+  assert.equal(Labels.step([], "a", 1), "")
+})

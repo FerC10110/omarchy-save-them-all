@@ -14,39 +14,43 @@ Column {
   readonly property var flip: service.flip
   readonly property var snap: flip.snapshot
   readonly property var caps: snap.capabilities
-  property int cursor: 0
+  // A row's own id, not its index: `rows` is rebuilt (new array, new
+  // objects) whenever Hyprflip settles or a capability appears, which would
+  // otherwise leave an index-based cursor pointing at a different row, or
+  // past the end once rows shrink (Fix round 1, Finding 4).
+  property string cursor: ""
   spacing: Style.space(6)
 
   readonly property var rows: {
     var out = []
     Labels.LANGUAGES.forEach(function(l) {
-      out.push({ section: "language", title: host.t(l.label), detail: "",
+      out.push({ id: "language:" + l.value, section: "language", title: host.t(l.label), detail: "",
                  selected: service.languageSetting === l.value, act: { kind: "language", value: l.value } })
     })
     if (flip.available && caps.appearance === true) Labels.APPEARANCES.forEach(function(a) {
-      out.push({ section: "appearance", title: host.t(a.label), detail: host.t(a.detail),
+      out.push({ id: "appearance:" + a.value, section: "appearance", title: host.t(a.label), detail: host.t(a.detail),
                  selected: snap.appearance === a.value, act: { kind: "appearance", value: a.value } })
     })
     if (flip.available && caps.spacing === true) Labels.SPACINGS.forEach(function(s) {
-      out.push({ section: "spacing", title: host.t(s.label), detail: host.t(s.detail),
+      out.push({ id: "spacing:" + s.value, section: "spacing", title: host.t(s.label), detail: host.t(s.detail),
                  selected: snap.card_gap === s.value, act: { kind: "spacing", value: s.value } })
     })
     if (flip.available) {
       Labels.transitions(snap.transition_modes).forEach(function(m) {
-        out.push({ section: "animation", title: host.t(m.label), detail: host.t(m.detail),
+        out.push({ id: "transition:" + m.value, section: "animation", title: host.t(m.label), detail: host.t(m.detail),
                    selected: snap.transition === m.value, act: { kind: "transition", value: m.value } })
       })
       Labels.SPEEDS.forEach(function(s) {
-        out.push({ section: "speed", title: host.t(s.label), detail: host.t("%1 ms", [s.ms]),
+        out.push({ id: "duration:" + s.ms, section: "speed", title: host.t(s.label), detail: host.t("%1 ms", [s.ms]),
                    selected: snap.duration_ms === s.ms, act: { kind: "duration", value: s.ms } })
       })
-      out.push({ section: "shortcuts", title: host.t("Keyboard shortcuts"),
+      out.push({ id: "shortcuts-page", section: "shortcuts", title: host.t("Keyboard shortcuts"),
                  detail: host.t("Change a shortcut or bring back the default"), selected: false, act: { kind: "page" } })
     }
     // No verdict yet (right after attach(), before status/snapshot land): say
     // so, not "Hyprflip is not available" — that would be reporting on
     // placeholder data (Task 11 review's reasoning, applied here too).
-    out.push({ section: "hyprflip",
+    out.push({ id: "hyprflip-status", section: "hyprflip",
                title: !flip.settled ? host.t("Checking Hyprflip…")
                  : flip.available ? host.t("Hyprflip %1 on Hyprland %2", [flip.status.hyprflip, flip.status.hyprland])
                  : host.t("Hyprflip is not available"),
@@ -55,6 +59,11 @@ Column {
                selected: false, act: { kind: "check" } })
     return out
   }
+
+  // Keep the cursor on the same row across a rebuild; once that row is gone
+  // (a capability disappeared, Hyprflip settled), fall back to the first one.
+  onRowsChanged: if (!rows.find(function(r) { return r.id === cursor })) cursor = Labels.step(rows, cursor, 0)
+  Component.onCompleted: cursor = Labels.step(rows, cursor, 0)
 
   function sectionTitle(section) {
     switch (section) {
@@ -68,6 +77,10 @@ Column {
     }
   }
 
+  // service.setOption already refuses (and leaves a notice) while Hyprflip
+  // is busy, for both the keyboard (activate()) and the mouse (ChoiceRow's
+  // onActivated) — both go through this same function, so neither path
+  // drops the action silently (Fix round 1, Finding 3).
   function choose(row) {
     var a = row.act
     if (a.kind === "language") service.setLanguage(a.value)
@@ -81,12 +94,13 @@ Column {
 
   function move(dx, dy) {
     if (dy === 0) return false
-    cursor = Math.max(0, Math.min(rows.length - 1, cursor + dy))
+    cursor = Labels.step(rows, cursor, dy)
     return true
   }
 
   function activate() {
-    if (cursor >= 0 && cursor < rows.length) choose(rows[cursor])
+    var row = rows.find(function(r) { return r.id === cursor })
+    if (row) choose(row)
   }
 
   Repeater {
@@ -112,11 +126,11 @@ Column {
         title: entry.modelData.title
         detail: entry.modelData.detail
         selected: entry.modelData.selected
-        cursorHere: tab.cursor === entry.index
+        cursorHere: tab.cursor === entry.modelData.id
         textColor: host.foreground
         fontFamily: host.fontFamily
         enabled: !tab.flip.busy || entry.modelData.section === "language"
-        onActivated: { tab.cursor = entry.index; tab.choose(entry.modelData) }
+        onActivated: { tab.cursor = entry.modelData.id; tab.choose(entry.modelData) }
       }
     }
   }
@@ -132,12 +146,15 @@ Column {
     wrapMode: Text.WordWrap
   }
 
+  // What the last setOption()/language/check said, the way CardsTab shows
+  // cardAction's result (Fix round 1, Finding 3): busy first, then a
+  // failure, then whatever bin/cards said outside a card action.
   Text {
     width: parent.width
     visible: text !== ""
     textFormat: Text.PlainText
-    text: tab.flip.failed ? tab.flip.notice : ""
-    color: host.urgent
+    text: tab.flip.busy ? host.t("Working…") : (tab.flip.failed ? tab.flip.notice : tab.service.cardsNotice)
+    color: tab.flip.failed ? host.urgent : host.dim
     font.family: host.fontFamily
     font.pixelSize: Style.font.bodySmall
     wrapMode: Text.WordWrap

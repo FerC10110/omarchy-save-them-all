@@ -169,6 +169,8 @@ var STRINGS = {
     "Record shortcut": "Grabar atajo",
     "Use default": "Usar el predeterminado",
     "Save shortcut": "Guardar atajo",
+    "Enter saves this shortcut · d for the default · Esc cancels.": "Enter guarda este atajo · d para el predeterminado · Esc cancela.",
+    "Enter records a new shortcut · d for the default · Esc cancels.": "Enter graba un atajo nuevo · d para el predeterminado · Esc cancela.",
   }
 }
 

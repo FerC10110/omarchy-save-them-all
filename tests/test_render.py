@@ -95,6 +95,8 @@ class RenderTest(unittest.TestCase):
                             'Cerrar el navegador limpio'],
             'settings-unavailable-es': ['Hyprflip no está disponible', 'Hyprflip no cargó', 'Idioma'],
             'shortcuts-es': ['Atajos de teclado', 'Voltear la tarjeta', 'Super+Ctrl+Alt+F'],
+            'settings-failed-es': ['Hyprflip está ocupado; probá de nuevo en un momento.'],
+            'shortcuts-busy-en': ['Working…'],
         }
         for name, shown in expected.items():
             texts = self.pages[name][1]

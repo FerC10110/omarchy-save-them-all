@@ -12,7 +12,10 @@ Column {
   required property var host
   readonly property var service: host.service
   readonly property var bindings: service.flip.snapshot.shortcuts
-  property int cursor: 0
+  // A row's own id, not its index (Fix round 1, Finding 4): `bindings.rows`
+  // is a fresh array on every snapshot refresh, so an index-based cursor
+  // could end up pointing at a different action once the list changes.
+  property string cursor: ""
   property string selectedId: ""
   readonly property var selected: bindings.rows.find(function(r) { return r.id === selectedId }) || null
   property int candidateMask: 0
@@ -22,7 +25,18 @@ Column {
   readonly property bool typing: recording
   readonly property string conflictText: selected
     ? Shortcuts.conflict(bindings.occupied, selectedId, candidateMask, candidateKey, host.t, labelOf) : ""
+  // Whether the candidate chord can be saved: also false while Hyprflip is
+  // busy, so a keyboard Enter and the Save button agree (Fix round 1,
+  // Finding 3).
+  readonly property bool canSave: !recording && error === "" && conflictText === "" && !service.flip.busy
+    && selected !== null && candidateKey !== ""
+    && (candidateMask !== selected.mask || candidateKey.toLowerCase() !== String(selected.key).toLowerCase())
   spacing: Style.space(8)
+
+  // Keep the cursor on the same row across a refresh; fall back to the
+  // first one once it is gone.
+  onBindingsChanged: if (!bindings.rows.find(function(r) { return r.id === cursor })) cursor = Labels.step(bindings.rows, cursor, 0)
+  Component.onCompleted: cursor = Labels.step(bindings.rows, cursor, 0)
 
   function labelOf(binding) {
     var own = Labels.shortcutLabel(binding.id, "")
@@ -45,10 +59,36 @@ Column {
     error = ""
   }
 
+  function startRecording() {
+    if (!selected) return
+    error = ""
+    recording = true
+    Qt.callLater(function() { recorder.forceActiveFocus() })
+  }
+
+  function useDefault() {
+    if (!selected) return
+    candidateMask = selected.default_mask
+    candidateKey = selected.default_key
+    error = ""
+  }
+
+  function save() {
+    if (!canSave) return
+    service.setOption("shortcut", { binding: selectedId, mask: candidateMask, key: candidateKey })
+  }
+
+  function cancelEdit() {
+    recording = false
+    selectedId = ""
+  }
+
   function capture(event) {
     event.accepted = true
     var r = Shortcuts.capture(event.key, event.modifiers, event.isAutoRepeat, host.t)
     if (r.ignore) return
+    // Esc alone, while recording: stop listening, but stay on this row and
+    // this panel (only the chord capture is cancelled).
     if (r.cancel) { recording = false; return }
     if (r.error) { error = r.error; return }
     candidateMask = r.mask
@@ -61,18 +101,31 @@ Column {
 
   function move(dx, dy) {
     if (dy === 0) return false
-    cursor = Math.max(0, Math.min(bindings.rows.length - 1, cursor + dy))
+    cursor = Labels.step(bindings.rows, cursor, dy)
     return true
   }
 
+  // Enter: pick the row under the cursor; once one is selected, either
+  // start recording (nothing worth saving yet) or save a captured chord —
+  // whichever the Save button itself would allow (Fix round 1, Finding 2).
   function activate() {
-    if (cursor >= 0 && cursor < bindings.rows.length) choose(bindings.rows[cursor])
+    if (selected) {
+      if (canSave) save()
+      else startRecording()
+      return
+    }
+    var row = bindings.rows.find(function(r) { return r.id === cursor })
+    if (row) choose(row)
+  }
+
+  function key(text) {
+    if (!selected || recording) return
+    if (String(text).toLowerCase() === "d") useDefault()
   }
 
   function back() {
     if (selectedId !== "") {
-      recording = false
-      selectedId = ""
+      cancelEdit()
       return true
     }
     host.openPage("settings")
@@ -100,12 +153,30 @@ Column {
     wrapMode: Text.WordWrap
   }
 
+  // What the last save said, the way CardsTab shows cardAction's result
+  // (Fix round 1, Finding 3): busy first, then a failure, then whatever
+  // bin/cards said outside this page's own edit.
+  Text {
+    width: parent.width
+    visible: text !== ""
+    textFormat: Text.PlainText
+    text: service.flip.busy ? host.t("Working…") : (service.flip.failed ? service.flip.notice : service.cardsNotice)
+    color: service.flip.failed ? host.urgent : host.dim
+    font.family: host.fontFamily
+    font.pixelSize: Style.font.bodySmall
+    wrapMode: Text.WordWrap
+  }
+
   // Keys go here while recording; the panel's key catcher stands aside.
   Item {
     id: recorder
     width: 0
     height: 0
     Keys.onPressed: function(event) { if (page.recording) page.capture(event) }
+    // Losing focus for any reason (the panel closing, a click elsewhere)
+    // must stop the recording too, or the ShortcutInhibitor could stay
+    // engaged with nothing actually listening (Fix round 1, Finding 1).
+    onActiveFocusChanged: if (!activeFocus) page.recording = false
   }
 
   Column {
@@ -144,6 +215,18 @@ Column {
       wrapMode: Text.WordWrap
     }
 
+    Text {
+      width: parent.width
+      visible: !page.recording
+      textFormat: Text.PlainText
+      text: page.canSave ? host.t("Enter saves this shortcut · d for the default · Esc cancels.")
+                         : host.t("Enter records a new shortcut · d for the default · Esc cancels.")
+      color: host.dim
+      font.family: host.fontFamily
+      font.pixelSize: Style.font.caption
+      wrapMode: Text.WordWrap
+    }
+
     Flow {
       width: parent.width
       spacing: Style.space(6)
@@ -153,11 +236,7 @@ Column {
         bordered: true
         foreground: host.foreground
         fontFamily: host.fontFamily
-        onClicked: {
-          page.error = ""
-          page.recording = true
-          recorder.forceActiveFocus()
-        }
+        onClicked: page.startRecording()
       }
 
       Button {
@@ -165,22 +244,16 @@ Column {
         bordered: true
         foreground: host.foreground
         fontFamily: host.fontFamily
-        onClicked: {
-          page.candidateMask = page.selected.default_mask
-          page.candidateKey = page.selected.default_key
-          page.error = ""
-        }
+        onClicked: page.useDefault()
       }
 
       Button {
         text: host.t("Save shortcut")
         bordered: true
-        enabled: !page.recording && page.error === "" && page.conflictText === "" && page.selected !== null
-          && page.candidateKey !== "" && (page.candidateMask !== page.selected.mask
-          || page.candidateKey.toLowerCase() !== String(page.selected.key).toLowerCase())
+        enabled: page.canSave
         foreground: host.foreground
         fontFamily: host.fontFamily
-        onClicked: page.service.setOption("shortcut", { binding: page.selectedId, mask: page.candidateMask, key: page.candidateKey })
+        onClicked: page.save()
       }
 
       Button {
@@ -188,10 +261,7 @@ Column {
         bordered: true
         foreground: host.foreground
         fontFamily: host.fontFamily
-        onClicked: {
-          page.recording = false
-          page.selectedId = ""
-        }
+        onClicked: page.cancelEdit()
       }
     }
 
@@ -203,16 +273,15 @@ Column {
 
     ChoiceRow {
       required property var modelData
-      required property int index
       width: page.width
       title: page.rowTitle(modelData)
       detail: page.rowDetail(modelData)
       selected: modelData.id === page.selectedId
-      cursorHere: page.cursor === index
+      cursorHere: page.cursor === modelData.id
       enabled: modelData.editable === true
       textColor: host.foreground
       fontFamily: host.fontFamily
-      onActivated: { page.cursor = index; page.choose(modelData) }
+      onActivated: { page.cursor = modelData.id; page.choose(modelData) }
     }
   }
 }

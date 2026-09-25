@@ -61,7 +61,21 @@ function shortcutLabel(id, fallback) {
   return found ? found.label : fallback
 }
 
+// The id of the row delta places from id in rows (each with its own `id`),
+// or "" with no rows; an id not found (removed, or the first call) starts
+// from the first row. Keeps a keyboard cursor stable across a row list that
+// is rebuilt on every change (SettingsTab's rows, a shortcut's own
+// bindings), after CardsModel's `step`.
+function step(rows, id, delta) {
+  var list = rows || []
+  if (list.length === 0) return ""
+  var i = list.findIndex(function(r) { return r.id === id })
+  if (i < 0) return list[0].id
+  return list[Math.max(0, Math.min(list.length - 1, i + delta))].id
+}
+
 if (typeof module !== "undefined") {
   module.exports = { TRANSITIONS: TRANSITIONS, SPEEDS: SPEEDS, APPEARANCES: APPEARANCES, SPACINGS: SPACINGS,
-                     LANGUAGES: LANGUAGES, SHORTCUTS: SHORTCUTS, transitions: transitions, shortcutLabel: shortcutLabel }
+                     LANGUAGES: LANGUAGES, SHORTCUTS: SHORTCUTS, transitions: transitions, shortcutLabel: shortcutLabel,
+                     step: step }
 }
