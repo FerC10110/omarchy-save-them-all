@@ -273,7 +273,11 @@ Panel {
         if (page.item && typeof page.item.move === "function" && page.item.move(dx, dy)) return
         if (dx !== 0) root.stepTab(dx)
       }
-      onActivateRequested: if (page.item && typeof page.item.activate === "function") page.item.activate()
+      // Enter only, not Space: PanelKeyCatcher fires returnRequested()
+      // exclusively for Enter, and activateRequested() for both (a page
+      // like CardBuilder's Enter submits the card; Space must not).
+      // WorkspaceTab has no activate(), so this is unaffected there.
+      onReturnRequested: if (page.item && typeof page.item.activate === "function") page.item.activate()
       onDeleteRequested: if (page.item && typeof page.item.remove === "function") page.item.remove()
       onTextKey: function(text) {
         if (root.onTab && text >= "1" && text <= "9") { root.selectTab(Number(text) - 1); return }

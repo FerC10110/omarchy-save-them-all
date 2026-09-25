@@ -35,6 +35,20 @@ function faceOf(draft, address) {
   return -1
 }
 
+// A stable key for a draft's faces (or one side of them): equal for two
+// drafts with the same windows on the same sides in the same order, even
+// though place()/remove()/setAxis() clone every side's array on every call.
+// The builder page and FaceBox use these to skip rebuilding a window list
+// (and its live thumbnails) on a cursor move or a name edit, which also
+// replace the draft as a whole (Service.qml reassigns it wholesale).
+function facesKey(draft) {
+  return draft ? JSON.stringify(draft.faces) : ""
+}
+
+function faceKey(draft, face) {
+  return draft ? JSON.stringify(draft.faces[face]) : "[]"
+}
+
 // What reason() needs: the windows of other cards, the windows of the card
 // being edited, and whether Hyprflip takes floating windows.
 function context(cards, draft, capabilities) {
@@ -88,13 +102,22 @@ function candidates(clients, draft, ctx, t) {
 }
 
 // Put a window on a side at index (-1: at the end), taking it off the
-// other side. -> { draft, problem }; on a problem the draft is unchanged.
+// other side. Reordering within the same side takes the window out first,
+// which shifts every later index down by one; a drop target computed
+// against the array before that removal (FaceBox's DropArea, against
+// box.members) needs the same shift, or it lands one slot past where it
+// was dropped. -> { draft, problem }; on a problem the draft is unchanged.
 function place(draft, address, face, index, t) {
   var d = copy(draft)
   var from = faceOf(d, address)
-  if (from >= 0) d.faces[from].splice(d.faces[from].indexOf(address), 1)
+  var at = index
+  if (from >= 0) {
+    var sourceIndex = d.faces[from].indexOf(address)
+    d.faces[from].splice(sourceIndex, 1)
+    if (from === face && at !== undefined && at >= 0 && sourceIndex < at) at -= 1
+  }
   if (d.faces[face].length >= MAX_PER_SIDE) return { draft: draft, problem: t("A side holds up to %1 windows.", [MAX_PER_SIDE]) }
-  var at = index === undefined || index < 0 || index > d.faces[face].length ? d.faces[face].length : index
+  at = at === undefined || at < 0 || at > d.faces[face].length ? d.faces[face].length : at
   d.faces[face].splice(at, 0, address)
   d.cursor = address
   return { draft: d, problem: "" }
@@ -195,6 +218,7 @@ function submitText(draft, t) {
 
 if (typeof module !== "undefined") {
   module.exports = { MAX_PER_SIDE: MAX_PER_SIDE, newDraft: newDraft, editDraft: editDraft, faceOf: faceOf,
+                     facesKey: facesKey, faceKey: faceKey,
                      context: context, reason: reason, candidates: candidates, place: place, remove: remove,
                      setAxis: setAxis, prune: prune, ready: ready, request: request, movesFrom: movesFrom,
                      twinWords: twinWords, wordText: wordText, label: label, slotAspect: slotAspect,

@@ -67,6 +67,49 @@ test("place moves a window between sides and keeps the order asked", () => {
   assert.deepEqual(d.faces, [[], ["0x1", "0x2"]])
 })
 
+test("place: reordering forward within the same side lands right after the drop target", () => {
+  // [A,B,C], drop A on B's right half (FaceBox computes index 2 against
+  // the pre-removal array of 3): should read [B,A,C], not [B,C,A].
+  let d = Builder.newDraft(3)
+  for (const a of ["0xA", "0xB", "0xC"]) d = Builder.place(d, a, 0, -1, t).draft
+  assert.deepEqual(d.faces[0], ["0xA", "0xB", "0xC"])
+  const r = Builder.place(d, "0xA", 0, 2, t)
+  assert.deepEqual(r.draft.faces[0], ["0xB", "0xA", "0xC"])
+})
+
+test("place: reordering backward within the same side needs no adjustment", () => {
+  let d = Builder.newDraft(3)
+  for (const a of ["0xA", "0xB", "0xC"]) d = Builder.place(d, a, 0, -1, t).draft
+  const r = Builder.place(d, "0xC", 0, 0, t)
+  assert.deepEqual(r.draft.faces[0], ["0xC", "0xA", "0xB"])
+})
+
+test("place: an index across faces is not shifted by the source face's removal", () => {
+  let d = Builder.newDraft(3)
+  d = Builder.place(d, "0x1", 0, -1, t).draft
+  d = Builder.place(d, "0x2", 1, -1, t).draft
+  const r = Builder.place(d, "0x1", 1, 0, t)
+  assert.deepEqual(r.draft.faces, [[], ["0x1", "0x2"]])
+})
+
+test("facesKey/faceKey: equal for the same content across separate clones, and touch only the changed side", () => {
+  const base = Builder.newDraft(3)
+  const withFront = Builder.place(base, "0x1", 0, -1, t).draft
+  const clonedAgain = Builder.place(base, "0x1", 0, -1, t).draft
+  // Two independent clones with the same content compare equal…
+  assert.equal(Builder.facesKey(withFront), Builder.facesKey(clonedAgain))
+  assert.equal(Builder.faceKey(withFront, 0), Builder.faceKey(clonedAgain, 0))
+  // …but differ from the draft before the change.
+  assert.notEqual(Builder.facesKey(base), Builder.facesKey(withFront))
+  assert.notEqual(Builder.faceKey(base, 0), Builder.faceKey(withFront, 0))
+  // Placing on the front clones the back's array too, but its key (content)
+  // stays the same: FaceBox must not rebuild the back's tiles for this.
+  const withBack = Builder.place(withFront, "0x2", 1, -1, t).draft
+  const withFrontAgain = Builder.place(withBack, "0x3", 0, -1, t).draft
+  assert.equal(Builder.faceKey(withBack, 1), Builder.faceKey(withFrontAgain, 1))
+  assert.notEqual(Builder.faceKey(withBack, 0), Builder.faceKey(withFrontAgain, 0))
+})
+
 test("a side holds up to five windows", () => {
   let d = Builder.newDraft(3)
   for (const a of ["0x1", "0x2", "0x3", "0x4", "0x5"]) d = Builder.place(d, a, 0, -1, t).draft

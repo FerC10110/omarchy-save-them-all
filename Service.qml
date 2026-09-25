@@ -250,12 +250,22 @@ Scope {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        // An unparseable or non-array reply is a glitch, not "every window
+        // closed": leave root.clients as it was and skip pruning, or an
+        // open draft would lose every window it holds over a bad reply.
+        var list
         try {
-          var list = JSON.parse(String(text || "[]"))
-          var before = root.byAddress
-          root.clients = Array.isArray(list) ? list.filter(function(c) { return c && c.address }) : []
-          root.pruneDraft(before)
-        } catch (e) {}
+          list = JSON.parse(String(text || "[]"))
+        } catch (e) {
+          return
+        }
+        if (!Array.isArray(list)) return
+        var before = root.byAddress
+        root.clients = list.filter(function(c) { return c && c.address })
+        // A genuinely empty list is itself suspect for pruning purposes
+        // (a transient hyprctl race, e.g. mid workspace switch): only
+        // prune when it can actually tell an open from a closed window.
+        if (root.clients.length > 0) root.pruneDraft(before)
       }
     }
     onExited: {

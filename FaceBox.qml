@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
+import "Builder.js" as Builder
 
 // One side of the card in the builder, with the shape of the place the card
 // will take. Its windows are laid out as Hyprflip will lay them out (a row
@@ -14,7 +15,18 @@ Item {
   property real aspect: 16 / 9
   readonly property var service: host.service
   readonly property var draft: service.draft
-  readonly property var members: draft ? draft.faces[face] : []
+  // This side's window list. Rebuilt only when its own content can differ
+  // — not on every draft reassignment: place()/remove()/setAxis() clone
+  // *both* sides on every call, and a cursor move or a name keystroke
+  // replaces the whole draft, so binding `members` straight to
+  // `draft.faces[face]` would tear down and rebuild every WindowTile (and
+  // its live thumbnail) here even when only the cursor, the name, or the
+  // *other* side changed.
+  readonly property string membersKey: Builder.faceKey(draft, face)
+  property var members: []
+  function refreshMembers() { members = draft ? draft.faces[face] : [] }
+  onMembersKeyChanged: refreshMembers()
+  Component.onCompleted: refreshMembers()
   readonly property string axis: draft ? draft.axes[face] : "row"
   implicitHeight: header.implicitHeight + Style.space(6) + area.height
 

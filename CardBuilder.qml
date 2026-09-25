@@ -15,7 +15,18 @@ Item {
   readonly property var draft: service.draft
   readonly property bool typing: nameField.activeFocus
   readonly property var ctx: Builder.context(service.flip.snapshot.cards, draft, service.flip.snapshot.capabilities)
-  readonly property var groups: draft ? Builder.candidates(service.clients, draft, ctx, host.t) : []
+  // The window list's model. Rebuilt only when what it actually shows can
+  // differ (the draft's faces, the client list, or the language) — not on
+  // every draft reassignment: a cursor move or a name keystroke also
+  // replaces `draft` as a whole (Service.qml keeps it immutable), and
+  // Builder.candidates() always returns brand new objects, so binding
+  // `groups` straight to `draft` would tear down and rebuild every
+  // WindowTile (and its live thumbnail) on each keypress.
+  readonly property string groupsKey: draft ? Builder.facesKey(draft) + "\u0000" + service.lang : ""
+  property var groups: []
+  function refreshGroups() { groups = draft ? Builder.candidates(service.clients, draft, ctx, host.t) : [] }
+  onGroupsKeyChanged: refreshGroups()
+  Component.onCompleted: refreshGroups()
   property var expanded: ({})
   readonly property var order: {
     var out = []
@@ -27,6 +38,14 @@ Item {
   readonly property var moving: draft ? Builder.movesFrom(draft, service.byAddress) : []
   readonly property int count: draft ? draft.faces[0].length + draft.faces[1].length : 0
   implicitHeight: layout.implicitHeight
+
+  // service.clients is reassigned (a new array) on every real refresh, not
+  // on a draft-only change, so this is exactly the "clients identity"
+  // half of groups' invalidation — the other half is groupsKey, above.
+  Connections {
+    target: page.service
+    function onClientsChanged() { page.refreshGroups() }
+  }
 
   function move(dx, dy) {
     if (dy !== 0 && order.length > 0 && draft) {
@@ -49,8 +68,11 @@ Item {
     if (draft && draft.cursor && Builder.faceOf(draft, draft.cursor) >= 0) service.removeFromDraft(draft.cursor)
   }
 
+  // submitDraft() itself guards on readiness and Hyprflip's state and sets
+  // builderNotice accordingly, so Enter on an incomplete draft says why
+  // instead of doing nothing.
   function activate() {
-    if (Builder.ready(draft)) service.submitDraft()
+    service.submitDraft()
   }
 
   function back() {
@@ -231,7 +253,7 @@ Item {
         text: page.draft ? page.draft.name : ""
         maximumLength: 60
         onTextEdited: page.service.setDraftName(text)
-        onAccepted: page.forceActiveFocus()
+        onAccepted: page.activate()
         Keys.onEscapePressed: page.forceActiveFocus()
       }
 
