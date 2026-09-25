@@ -48,6 +48,22 @@ var STRINGS = {
     "Close the browser cleanly": "Cerrar el navegador limpio",
     "Your Omarchy menu already changes %1, so this stays off.": "Tu menú de Omarchy ya cambia %1, así que esto queda apagado.",
     "Before Logout, Reboot and Shutdown, so it brings its tabs back. Edits the Omarchy menu.": "Antes de Cerrar sesión, Reiniciar y Apagar, para que recupere sus pestañas. Edita el menú de Omarchy.",
+    "Already in a card": "Ya está en una tarjeta",
+    "Fullscreen": "Pantalla completa",
+    "On a special workspace": "En un escritorio especial",
+    "This panel": "Este panel",
+    "In a window group": "En un grupo de ventanas",
+    "Pinned": "Fijada",
+    "Floating; Hyprflip needs it tiled": "Flotante; Hyprflip la necesita en mosaico",
+    "A side holds up to %1 windows.": "Una cara admite hasta %1 ventanas.",
+    "left": "izquierda",
+    "right": "derecha",
+    "center": "centro",
+    "top": "arriba",
+    "bottom": "abajo",
+    "middle": "medio",
+    "Save changes": "Guardar cambios",
+    "Create card": "Crear tarjeta",
   }
 }
 
