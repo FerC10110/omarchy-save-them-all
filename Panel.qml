@@ -43,10 +43,10 @@ Panel {
 
   // Tabs, in order, and every page by name. Later tasks add entries.
   readonly property var tabs: ["workspace"]
-  readonly property var pages: ({ workspace: "WorkspaceTab.qml" })
+  readonly property var pages: ({ workspace: "WorkspaceTab.qml", builder: "CardBuilder.qml" })
   property string pageName: "workspace"
   readonly property bool onTab: tabs.indexOf(pageName) >= 0
-  readonly property bool wide: false
+  readonly property bool wide: pageName === "builder"
 
   function t(text, args) { return service ? service.t(text, args) : I18n.t(text, "en", args) }
 
@@ -80,6 +80,9 @@ Panel {
     selectTab((i + direction + tabs.length) % tabs.length)
     return true
   }
+
+  // Back from the builder: the Cards tab once it exists, else the first.
+  function openHome() { openPage("cards" in pages ? "cards" : tabs[0]) }
 
   function pluginPath(relative) {
     var url = String(Qt.resolvedUrl(relative))

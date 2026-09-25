@@ -72,4 +72,12 @@ QtObject {
   function refreshClients() {}
   function toplevelFor(address) { return null }
   function ungroup(workspace) {}
+  function moveCursor(address) {}
+  function place(address, face, index) {}
+  function removeFromDraft(address) {}
+  function setAxis(face, axis) {}
+  function setDraftName(name) {}
+  function submitDraft() {}
+  function cancelBuilder() {}
+  function startBuilder(card) {}
 }

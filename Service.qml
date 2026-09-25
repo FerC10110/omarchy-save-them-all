@@ -4,6 +4,8 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "I18n.js" as I18n
 import "AppNames.js" as AppNames
+import "Builder.js" as Builder
+import "Protocol.js" as Protocol
 
 // Loaded once by the shell (kind "service"). It owns what outlives the
 // panel: the language, the connection to Hyprflip, the list of windows and
@@ -39,8 +41,13 @@ Scope {
     return { id: e.id, name: e.name, icon: e.icon, startupClass: e.startupClass, exec: e.execString }
   })
   readonly property int focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 0
-  readonly property bool watching: panel !== null && panel.opened === true
+  readonly property bool watching: (panel !== null && panel.opened === true) || draft !== null
   readonly property var flip: flipConnection
+  readonly property bool thumbnails: true
+  property var draft: null          // the card builder's, kept while the panel closes
+  property string builderNotice: ""
+  property var namedFaces: null     // a card just made, waiting for its name
+  property string pendingName: ""
 
   function pluginPath(relative) {
     var url = String(Qt.resolvedUrl(relative))
@@ -92,10 +99,91 @@ Scope {
     return Hyprland.toplevels.values.find(function(tl) { return tl.address === bare }) || null
   }
 
+  // -- the card builder --------------------------------------------------
+
+  function startBuilder(card) {
+    builderNotice = ""
+    if (card) {
+      var shown = byAddress[card.current]
+      var rect = card.floating && shown ? { at: shown.at, size: shown.size } : null
+      draft = Builder.editDraft(card, names[String(card.id)] || "", rect)
+    } else {
+      draft = Builder.newDraft(focusedWorkspace)
+    }
+    refreshClients()
+    Hyprland.refreshToplevels()
+    if (panel) panel.openPage("builder")
+  }
+
+  function moveCursor(address) {
+    if (draft) draft = Object.assign({}, draft, { cursor: address })
+  }
+
+  function place(address, face, index) {
+    if (!draft) return
+    var r = Builder.place(draft, address, face, index, t)
+    draft = r.draft
+    builderNotice = r.problem
+  }
+
+  function removeFromDraft(address) {
+    if (!draft) return
+    draft = Builder.remove(draft, address)
+    builderNotice = ""
+  }
+
+  function setAxis(face, axis) {
+    if (draft) draft = Builder.setAxis(draft, face, axis)
+  }
+
+  function setDraftName(name) {
+    if (draft) draft = Object.assign({}, draft, { name: String(name || "") })
+  }
+
+  function cancelBuilder() {
+    draft = null
+    builderNotice = ""
+    if (panel) panel.openHome()
+  }
+
+  function submitDraft() {
+    if (!draft) return
+    if (!Builder.ready(draft)) { builderNotice = t("Put at least one window on each side."); return }
+    if (flipConnection.busy) { builderNotice = t("Hyprflip is busy; try again in a moment."); return }
+    if (!flipConnection.canCreate) { builderNotice = flipConnection.unavailableText || t("The card could not be made."); return }
+    builderNotice = ""
+    var started = flipConnection.run("create", Builder.request(draft), {
+      workspace: draft.workspace, replace: draft.mode === "edit" ? draft.card : null, reopen: true })
+    if (!started) builderNotice = t("Hyprflip is busy; try again in a moment.")
+  }
+
+  // A window of the draft closed: it leaves the card, the rest stays.
+  function pruneDraft(before) {
+    if (!draft) return
+    var r = Builder.prune(draft, clients)
+    if (r.gone.length === 0) return
+    draft = r.draft
+    builderNotice = t("%1 closed and left the card.", [r.gone.map(function(a) {
+      return before[a] ? appName(before[a]) : a
+    }).join(", ")])
+  }
+
   function flipFinished(action, ok, message, pending) {
     var reopen = pending && pending.options && pending.options.reopen
     var ws = flipConnection.sent && flipConnection.sent.context ? flipConnection.sent.context.workspace : 0
     if (reopen && panel && (!ws || ws === focusedWorkspace)) panel.reveal()
+    if (action === "create" && draft) {
+      if (ok) {
+        cardsNotice = draft.mode === "edit" ? t("Changes saved.") : t("Card created.")
+        namedFaces = draft.faces
+        pendingName = draft.name
+        draft = null
+        builderNotice = ""
+        if (panel) panel.openHome()
+      } else {
+        builderNotice = message || t("The card could not be made.")
+      }
+    }
   }
 
   Hyprflip {
@@ -106,6 +194,20 @@ Scope {
     owner: root.panel
     watching: root.watching
     onFinished: function(action, ok, message, pending) { root.flipFinished(action, ok, message, pending) }
+  }
+
+  // A new card gets its name once Hyprflip lists it.
+  Connections {
+    target: flipConnection
+    function onSnapshotChanged() {
+      if (!root.namedFaces) return
+      var made = (flipConnection.snapshot.cards || []).find(function(c) {
+        return Protocol.sameFaces(Protocol.faceAddresses(c), root.namedFaces)
+      })
+      if (!made) return
+      root.setName(made.id, root.pendingName)
+      root.namedFaces = null
+    }
   }
 
   FileView {
@@ -150,7 +252,9 @@ Scope {
       onStreamFinished: {
         try {
           var list = JSON.parse(String(text || "[]"))
+          var before = root.byAddress
           root.clients = Array.isArray(list) ? list.filter(function(c) { return c && c.address }) : []
+          root.pruneDraft(before)
         } catch (e) {}
       }
     }

@@ -15,6 +15,16 @@ var STEPS = [
   // Workspace tab shows what the script said, translated.
   { name: "workspace-cards-notice-es", page: "WorkspaceTab.qml", lang: "es",
     patch: { cardsNotice: "Algunas ventanas siguen en un grupo; probá de nuevo" } },
+  { name: "builder-new-en", page: "CardBuilder.qml", lang: "en",
+    patch: { draft: { mode: "create", card: null, workspace: 3, faces: [["0x1"], ["0x4", "0x5"]], axes: ["row", "column"],
+                      visible: 0, floating: null, name: "Work", cursor: "0x4" } } },
+  { name: "builder-edit-es", page: "CardBuilder.qml", lang: "es",
+    patch: { draft: { mode: "edit", card: { kind: "container", id: 1, faces: [["0x2"], ["0x3"]] }, workspace: 3,
+                      faces: [["0x2"], ["0x3"]], axes: ["row", "row"], visible: 0, floating: null, name: "Notes", cursor: "" } } },
+  { name: "builder-notice-es", page: "CardBuilder.qml", lang: "es",
+    patch: { builderNotice: "Una cara admite hasta 5 ventanas.",
+             draft: { mode: "create", card: null, workspace: 3, faces: [["0x1"], []], axes: ["row", "row"],
+                      visible: 0, floating: null, name: "", cursor: "0x1" } } },
 ]
 
 if (typeof module !== "undefined") module.exports = { STEPS: STEPS }

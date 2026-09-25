@@ -81,6 +81,9 @@ class RenderTest(unittest.TestCase):
             'workspace-empty-es': ['Todavía no hay nada guardado para este escritorio.'],
             'workspace-unsettled-es': ['Escritorio 3'],
             'workspace-cards-notice-es': ['Algunas ventanas siguen en un grupo; probá de nuevo'],
+            'builder-new-en': ['New card', 'Front', 'Back', 'Create card', 'Windows', 'kitty · left'],
+            'builder-edit-es': ['Editar tarjeta', 'Frente', 'Reverso', 'Guardar cambios', 'Cancelar'],
+            'builder-notice-es': ['Una cara admite hasta 5 ventanas.', 'Nueva tarjeta', '＋ soltá acá'],
         }
         for name, shown in expected.items():
             texts = self.pages[name][1]
