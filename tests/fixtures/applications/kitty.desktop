@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=kitty
+Icon=kitty
+Exec=kitty
+StartupWMClass=kitty
