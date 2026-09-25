@@ -34,7 +34,7 @@ QtObject {
     // to render the moment right after attach(), before either has landed.
     property bool settled: true
     readonly property bool available: status.available === true && snapshot.available === true
-    readonly property bool canCreate: available && snapshot.capabilities.create_faces === true
+    readonly property bool canCreate: Protocol.canCreate(available, snapshot)
     readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
     readonly property string unavailableText: status.available === true ? "" : Protocol.unavailableText(status, t)
     property bool busy: false

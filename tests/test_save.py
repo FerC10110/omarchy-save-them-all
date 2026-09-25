@@ -2,7 +2,7 @@
 the previous save when it is not."""
 import json
 
-from scripttest import ScriptTest, client, container, flip, saved_window
+from scripttest import ScriptTest, client, container, flip, pair, saved_window
 
 TERMINAL = {'kind': 'terminal'}
 CALC = {'kind': 'app', 'desktop': 'org.gnome.Calculator.desktop'}
@@ -34,6 +34,20 @@ class SaveCardsTest(ScriptTest):
                       {'windows': [2, 3], 'axis': 'column', 'ratios': [0.5, 0.5]}],
             'visible': 0, 'floating': None}])
         self.assertEqual(self.notifications()[-1][0], 'Saved 4 windows and 1 card from workspace 3')
+
+    def test_save_keeps_both_windows_of_a_native_pair_as_a_card(self):
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(pairs=[pair(3, '0x2', '0x3')]), clients=[
+            client('0x1', 'kitty', at=(0, 0), size=(960, 1080), tags=['terminal']),
+            client('0x2', 'org.gnome.Calculator', at=(960, 0), size=(960, 1080), grouped=['0x2', '0x3']),
+            client('0x3', 'obsidian', at=(960, 0), size=(960, 1080), hidden=True, grouped=['0x2', '0x3'])])
+        r = self.run_script('save-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        saved = self.saved(3)
+        self.assertEqual([w['class'] for w in saved['windows']], ['kitty', 'org.gnome.Calculator', 'obsidian'])
+        self.assertEqual(saved['cards'], [{
+            'name': '', 'faces': [{'windows': [1], 'axis': 'row', 'ratios': [1.0]},
+                                  {'windows': [2], 'axis': 'row', 'ratios': [1.0]}],
+            'visible': 0, 'floating': None}])
 
     def test_a_card_left_out_is_told_even_when_quiet(self):
         self.with_card([container(1, [['0x2'], ['0x9']])],

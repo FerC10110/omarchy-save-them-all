@@ -172,6 +172,22 @@ def flip_status():
     return state if isinstance(state, dict) else None
 
 
+def live_cards(state, now):
+    """Every live card of a `hyprflip status`: its containers, and its native
+    pairs as one-and-one cards (two windows in a native group, the front
+    first; a pair has no layouts or box, so its place is its shown window's)."""
+    cards = [c for c in state.get('containers', []) if isinstance(c, dict)]
+    for p in state.get('pairs', []):
+        if not isinstance(p, dict):
+            continue
+        shown = now.get(p.get('current'), {})
+        cards.append({'id': p.get('id'), 'kind': 'pair', 'faces': [[p.get('front')], [p.get('back')]],
+                      'current': p.get('current'), 'active': 1 if p.get('current') == p.get('back') else 0,
+                      'floating': bool(shown.get('floating')),
+                      'box': list(shown.get('at') or []) + list(shown.get('size') or []), 'layouts': []})
+    return cards
+
+
 def helper_snapshot():
     try:
         done = subprocess.run(['python3', str(HELPER), 'snapshot'], capture_output=True, text=True, timeout=15)
@@ -523,7 +539,7 @@ def members(args):
     except HyprError:
         state = None
     if state:
-        found = [a for card in state.get('containers', [])
+        found = [a for card in live_cards(state, now)
                  if now.get(card.get('current'), {}).get('workspace', {}).get('id') == ws
                  for face in card.get('faces', []) for a in face if a in now]
     elif args.previous:
@@ -543,7 +559,7 @@ def capture(args):
     state = flip_status() or {}
     names = read_names()
     cards, notes = [], []
-    for card in state.get('containers', []):
+    for card in live_cards(state, now):
         if now.get(card.get('current'), {}).get('workspace', {}).get('id') != ws:
             continue
         title = live_title(card, now, names)
@@ -885,8 +901,8 @@ def rebuild(args):
             continue
         members = faces[0] + faces[1]
         try:
-            containers = (flip_status() or {}).get('containers', [])
             now = clients()
+            containers = live_cards(flip_status() or {}, now)   # a live pair counts too
         except CardsError as error:
             result['notes'].append(note(msg('Card %1 could not be rebuilt: %2', title, error)))
             continue

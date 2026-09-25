@@ -3,7 +3,7 @@ helper. A helper that fails or hangs never stops the rest."""
 import json
 import time
 
-from scripttest import ScriptTest, client, container, flip, saved_window
+from scripttest import ScriptTest, client, container, flip, pair, saved_window
 
 W = [saved_window('kitty', (0, 0), (960, 1080), None),
      saved_window('org.gnome.Calculator', (960, 0), (960, 1080), None),
@@ -42,6 +42,25 @@ class RebuildTest(ScriptTest):
     def test_second_rebuild_keeps_the_card(self):
         self.rebuild()
         self.assertEqual(self.rebuild(), {'built': 0, 'kept': 1, 'notes': []})
+        self.assertEqual(len(self.helper_requests()), 1)
+
+    def test_a_live_native_pair_of_the_same_windows_is_kept(self):
+        state = self.hypr()
+        state['hyprflip']['pairs'] = [pair(9, '0x2', '0x3')]
+        for c in state['clients'][1:3]:
+            c['grouped'] = ['0x2', '0x3']
+        state['clients'][2]['hidden'] = True
+        self.hypr_state(**state)
+        one = dict(CARD, faces=[{'windows': [1], 'axis': 'row', 'ratios': [1.0]},
+                                {'windows': [2], 'axis': 'row', 'ratios': [1.0]}])
+        self.assertEqual(self.rebuild([one]), {'built': 0, 'kept': 1, 'notes': []})
+        self.assertEqual(self.helper_requests(), [])
+
+    def test_a_saved_pair_is_built_once_and_then_kept(self):
+        one = dict(CARD, faces=[{'windows': [1], 'axis': 'row', 'ratios': [1.0]},
+                                {'windows': [2], 'axis': 'row', 'ratios': [1.0]}], visible=1)
+        self.assertEqual(self.rebuild([one]), {'built': 1, 'kept': 0, 'notes': []})
+        self.assertEqual(self.rebuild([one]), {'built': 0, 'kept': 1, 'notes': []})
         self.assertEqual(len(self.helper_requests()), 1)
 
     def test_a_missing_window_leaves_the_rest_of_its_side(self):

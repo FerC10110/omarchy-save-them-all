@@ -66,6 +66,15 @@ function sameFaces(a, b) {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+// Whether whole cards can be made and edited: the same check as bin/cards
+// helper_can_create (the helper's create_faces, and a real container
+// provider; a stale one can advertise create_faces without containers).
+// available: Hyprflip.available, which already covers protocol and status.
+function canCreate(available, snapshot) {
+  var caps = (snapshot && snapshot.capabilities) || {}
+  return available === true && caps.create_faces === true && caps.containers === true
+}
+
 function cardTarget(card) {
   return { kind: card.kind, id: card.id, token: card.token }
 }
@@ -88,6 +97,6 @@ function unavailableText(status, t) {
 
 if (typeof module !== "undefined") {
   module.exports = { emptySnapshot: emptySnapshot, parseSnapshot: parseSnapshot, request: request, receive: receive,
-                     faceAddresses: faceAddresses, sameFaces: sameFaces, cardTarget: cardTarget,
+                     faceAddresses: faceAddresses, sameFaces: sameFaces, cardTarget: cardTarget, canCreate: canCreate,
                      unavailableText: unavailableText }
 }

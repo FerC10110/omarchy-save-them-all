@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 
-from scripttest import BIN, ROOT, ScriptTest, client, container, flip, saved_window
+from scripttest import BIN, ROOT, ScriptTest, client, container, flip, pair, saved_window
 
 CALC = {'kind': 'app', 'desktop': 'org.gnome.Calculator.desktop'}
 OBSIDIAN = {'kind': 'app', 'desktop': 'obsidian.desktop'}
@@ -52,6 +52,14 @@ class MembersTest(ScriptTest):
             container(1, [['0x2'], ['0x3']]), container(2, [['0x8'], ['0x9']])]),
             clients=[client('0x2', 'a'), client('0x3', 'b', hidden=True),
                      client('0x8', 'c', ws=4), client('0x9', 'd', ws=4, hidden=True)])
+        self.assertEqual(self.cards_json('members', '--workspace', '3'), ['0x2', '0x3'])
+
+    def test_members_of_the_workspace_native_pairs(self):
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(pairs=[pair(5, '0x2', '0x3'), pair(6, '0x8', '0x9')]),
+            clients=[client('0x2', 'a', grouped=['0x2', '0x3']),
+                     client('0x3', 'b', hidden=True, grouped=['0x2', '0x3']),
+                     client('0x8', 'c', ws=4, grouped=['0x8', '0x9']),
+                     client('0x9', 'd', ws=4, hidden=True, grouped=['0x8', '0x9'])])
         self.assertEqual(self.cards_json('members', '--workspace', '3'), ['0x2', '0x3'])
 
     def test_a_window_titled_like_a_lua_error_does_not_break_hyprctl(self):
@@ -118,6 +126,25 @@ class CaptureTest(ScriptTest):
                            [client('0x2', 'a'), client('0x9', 'org.omarchy.screensaver')])
         self.assertEqual(out['cards'], [])
         self.assertEqual(out['notes'][-1], 'Card a ↔ screensaver was not saved: one of its sides has no saved window')
+
+    def test_a_native_pair_is_a_one_and_one_card(self):
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(pairs=[pair(4, '0x2', '0x3', current='0x3')]),
+                        clients=[client('0x2', 'a', hidden=True, grouped=['0x2', '0x3']),
+                                 client('0x3', 'b', grouped=['0x2', '0x3'])])
+        out = self.cards_json('capture', '--workspace', '3', '--addresses', json.dumps(['0x1', '0x3', '0x2']))
+        self.assertEqual(out, {'cards': [{
+            'name': '', 'faces': [{'windows': [2], 'axis': 'row', 'ratios': [1.0]},
+                                  {'windows': [1], 'axis': 'row', 'ratios': [1.0]}],
+            'visible': 1, 'floating': None}], 'notes': []})
+
+    def test_a_floating_native_pair_keeps_its_place(self):
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(pairs=[pair(4, '0x2', '0x3')]),
+                        clients=[client('0x2', 'a', at=(100, 120), size=(800, 600), floating=True,
+                                        grouped=['0x2', '0x3']),
+                                 client('0x3', 'b', floating=True, hidden=True, grouped=['0x2', '0x3'])])
+        out = self.cards_json('capture', '--workspace', '3', '--addresses', json.dumps(['0x2', '0x3']))
+        self.assertEqual((out['cards'][0]['visible'], out['cards'][0]['floating']),
+                         (0, {'at': [100, 120], 'size': [800, 600]}))
 
     def test_cards_of_other_workspaces_are_not_captured(self):
         out = self.capture([container(1, [['0x8'], ['0x9']])], [], [client('0x8', 'a', ws=4), client('0x9', 'b', ws=4)])

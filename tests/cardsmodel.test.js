@@ -44,3 +44,10 @@ test("reference is what the service checks against a fresh snapshot", () => {
   assert.deepEqual(CardsModel.reference(card(4, 3, [["0x1"], ["0x2", "0x3"]])),
     { kind: "container", id: 4, faces: [["0x1"], ["0x2", "0x3"]] })
 })
+
+test("a native pair reads and is referenced like a one-and-one card", () => {
+  const pair = card(5, 3, [["0x1"], ["0x2"]], { kind: "pair", key: "pair:5", active: 1, current: "0x2" })
+  assert.equal(CardsModel.title(pair, {}, byAddress, appName), "kitty ↔ obsidian")
+  assert.deepEqual(CardsModel.reference(pair), { kind: "pair", id: 5, faces: [["0x1"], ["0x2"]] })
+  assert.deepEqual(CardsModel.groups([pair], 3)[0].cards.map(c => c.key), ["pair:5"])
+})

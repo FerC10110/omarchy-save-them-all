@@ -164,3 +164,28 @@ test("submitText follows the mode", () => {
   assert.equal(Builder.submitText(Builder.newDraft(3), t), "Create card")
   assert.equal(Builder.submitText(Builder.editDraft(CARD, "", null), t), "Save changes")
 })
+
+// A native pair as the Hyprflip helper's snapshot lists it: kind "pair", one
+// window a side, no layouts (so both axes read "horizontal"), both windows in
+// one native group, the back shown.
+const PAIR = { id: 5, kind: "pair", key: "pair:5", token: "p", workspace: 3, active: 1, floating: false,
+  current: "0x7", unfolded: false,
+  faces: [{ index: 0, axis: "horizontal", panes: [{ address: "0x6" }] },
+          { index: 1, axis: "horizontal", panes: [{ address: "0x7" }] }] }
+
+test("editDraft loads a native pair as a one-and-one draft that replaces it", () => {
+  const d = Builder.editDraft(PAIR, "", null)
+  assert.equal(d.mode, "edit")
+  assert.deepEqual(d.card, { kind: "pair", id: 5, faces: [["0x6"], ["0x7"]] })
+  assert.deepEqual(d.faces, [["0x6"], ["0x7"]])
+  assert.deepEqual(d.axes, ["row", "row"])
+  assert.equal(d.visible, 1)
+  assert.equal(d.floating, null)
+  assert.ok(Builder.ready(d))
+  assert.deepEqual(Builder.request(d), { faces: [["address:0x6"], ["address:0x7"]], axes: ["row", "row"],
+    ratios: null, visible: 1, floating: null })
+  // Its own windows sit in a native group, and still may stay in the card.
+  const ctx = Builder.context([CARD, PAIR], d, {})
+  assert.equal(Builder.reason(win("0x7", "b", 3, { grouped: ["0x6", "0x7"], hidden: true }), ctx, t), "")
+  assert.equal(Builder.reason(win("0x2", "a", 3), ctx, t), "Already in a card")
+})

@@ -41,12 +41,18 @@ def container(cid, faces, current=None, active=0, floating=False, box=(960, 0, 9
                                    for f in faces]}
 
 
-def flip(containers=()):
+def pair(pid, front, back, current=None):
+    """One native pair of `hyprctl hyprflip status` (Controller::status): two
+    windows in a native Hyprland group, no layouts, no box."""
+    return {'id': pid, 'front': front, 'back': back, 'current': current or front}
+
+
+def flip(containers=(), pairs=()):
     """`hyprctl hyprflip status` of Hyprflip 0.3.0."""
     return {'version': '0.3.0', 'native_cards': True, 'container_provider': 'native',
             'container_max_panes': 5, 'floating_cards': True, 'workspace_protection': True,
             'transition': 'flip', 'transition_modes': ['flip', 'instant'], 'card_frame': False,
-            'card_gap': -1, 'pairs': [], 'containers': list(containers)}
+            'card_gap': -1, 'pairs': list(pairs), 'containers': list(containers)}
 
 
 class ScriptTest(unittest.TestCase):

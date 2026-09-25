@@ -60,3 +60,13 @@ test("unavailableText says what happened and what to run", () => {
   for (const reason of ["no-hyprland", "no-helper", "protocol", "helper"])
     assert.notEqual(Protocol.unavailableText({ reason: reason, fix: "x", detail: "y" }, es), Protocol.unavailableText({ reason: reason, fix: "x", detail: "y" }, en))
 })
+
+test("canCreate needs the same helper as bin/cards: create_faces and a container provider", () => {
+  const snap = caps => Object.assign(Protocol.emptySnapshot(), { available: true, capabilities: caps })
+  assert.equal(Protocol.canCreate(true, snap({ create_faces: true, containers: true })), true)
+  assert.equal(Protocol.canCreate(true, snap({ create_faces: true, containers: false })), false)
+  assert.equal(Protocol.canCreate(true, snap({ create_faces: true })), false)
+  assert.equal(Protocol.canCreate(true, snap({ containers: true })), false)
+  assert.equal(Protocol.canCreate(false, snap({ create_faces: true, containers: true })), false)
+  assert.equal(Protocol.canCreate(true, Protocol.emptySnapshot()), false)
+})

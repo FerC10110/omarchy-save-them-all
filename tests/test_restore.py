@@ -88,6 +88,25 @@ class RestoreCardsTest(ScriptTest):
         self.assertIn('Cards in workspace-3.json were ignored: card 1 needs exactly two sides', body)
         self.assertEqual(self.helper_requests(), [])
 
+    def test_a_cards_value_that_is_not_a_list_is_ignored_with_a_note(self):
+        for bad in ({}, 'x', 7):
+            with self.subTest(cards=bad):
+                self.log_path.write_text('')
+                (self.state_dir / 'restore.log').unlink(missing_ok=True)
+                self.fresh_session()
+                data = self.saved(3)
+                data['cards'] = bad
+                (self.state_dir / 'workspace-3.json').write_text(__import__('json').dumps(data))
+                r = self.run_script('restore-them-all', '--quiet')
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual({a: c['size'] for a, c in self.clients_by_address().items()},
+                                 {'0x1': [960, 1080], '0x2': [960, 1080], '0x3': [960, 1080]})
+                title, body = self.notifications()[-1]
+                self.assertEqual(title, 'Windows restored on workspace 3, cards with notes')
+                self.assertIn('Cards in workspace-3.json were ignored: cards must be a list', body)
+                self.assertIn('cards must be a list', (self.state_dir / 'restore.log').read_text())
+                self.assertEqual(self.helper_requests(), [])
+
     def test_restore_survives_failing_cards(self):
         self.fresh_session()
         self.helper_config(outcome='error', message='Fake failure')

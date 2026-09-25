@@ -411,7 +411,9 @@ addresses=$(addr_json)
 
 # Cards: in the tree each card takes one place, the one of its slot; its
 # other windows wait outside until the card is built (bin/cards layout).
-has_cards=$(jq -r 'if (.cards | type) == "array" and (.cards | length) > 0 then "yes" else "no" end' "$file" 2>/dev/null || echo no)
+# A cards value that is not a list still goes to bin/cards, which drops it
+# whole with a note, so a broken block is never ignored in silence.
+has_cards=$(jq -r 'if .cards == null or .cards == [] then "no" else "yes" end' "$file" 2>/dev/null || echo no)
 declare -A hidden=() slot=()
 if [[ $has_cards == yes ]] && card_layout=$("$BIN_DIR/cards" layout --file "$file" --addresses "$addresses" 2>>"$LOG"); then
   while read -r i; do [[ -n $i ]] && hidden[$i]=1; done < <(jq -r '.hide[]' <<<"$card_layout")

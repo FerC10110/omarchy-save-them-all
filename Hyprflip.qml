@@ -34,7 +34,7 @@ Scope {
   // placeholders: nothing that reads Hyprflip as absent should say so before
   // this is true, or it is reporting on data that has not arrived.
   readonly property bool settled: statusChecked && (status.available !== true || snapshotChecked)
-  readonly property bool canCreate: available && snapshot.capabilities.create_faces === true
+  readonly property bool canCreate: Protocol.canCreate(available, snapshot)
   readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
   readonly property string unavailableText: {
     if (status.available !== true) return Protocol.unavailableText(status, t)
