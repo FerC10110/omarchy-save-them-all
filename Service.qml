@@ -152,7 +152,8 @@ Scope {
   function cardAction(action, card) {
     if (!card) return
     cardsNotice = ""
-    flipConnection.run(action, {}, { card: CardsModel.reference(card), workspace: card.workspace, reopen: true })
+    var started = flipConnection.run(action, {}, { card: CardsModel.reference(card), workspace: card.workspace, reopen: true })
+    if (!started) cardsNotice = t("Hyprflip is busy; try again in a moment.")
   }
 
   function submitDraft() {

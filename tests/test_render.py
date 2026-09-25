@@ -87,6 +87,7 @@ class RenderTest(unittest.TestCase):
             'cards-en': ['Notes', 'Tiled', 'Front: Calculator', 'Back: Obsidian', 'Flip', 'New card'],
             'cards-es': ['Mosaico', 'Frente: Calculator', 'Reverso: Obsidian', 'Voltear', 'Desarmar', 'Tarjeta creada.'],
             'cards-unavailable-es': ['Las tarjetas necesitan Hyprflip', 'El asistente de Hyprflip no está instalado'],
+            'cards-unsettled-es': ['Revisando Hyprflip…'],
             'cards-empty-en': ['No cards yet. Press n to make one.'],
         }
         for name, shown in expected.items():
@@ -97,11 +98,14 @@ class RenderTest(unittest.TestCase):
     def test_pages_do_not_show_a_cards_paused_warning_without_a_verdict(self):
         # Hyprflip ok (workspace-es), no saved cards (workspace-empty-es), and
         # status ok but no snapshot yet (workspace-unsettled-es): none of them
-        # has grounds to say cards are paused.
+        # has grounds to say cards are paused. Same reasoning on the Cards tab
+        # itself (cards-unsettled-es): no verdict yet is not "Cards need
+        # Hyprflip", just "Checking Hyprflip…".
         hidden = {
             'workspace-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
             'workspace-empty-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
             'workspace-unsettled-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
+            'cards-unsettled-es': ['Las tarjetas necesitan Hyprflip'],
         }
         for name, unshown in hidden.items():
             texts = self.pages[name][1]

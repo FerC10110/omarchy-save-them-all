@@ -29,6 +29,10 @@ var STEPS = [
   { name: "cards-es", page: "CardsTab.qml", lang: "es", patch: { cardsNotice: "Tarjeta creada." } },
   { name: "cards-unavailable-es", page: "CardsTab.qml", lang: "es",
     patch: { status: { available: false, reason: "no-helper", fix: "python3 ~/.local/src/hyprflip-omacards/scripts/install-setup.py --backend-only" } } },
+  // Hyprflip's status is ok but its first snapshot has not come back yet
+  // (still Protocol.emptySnapshot(), available: false): no verdict, so no
+  // premature "Cards need Hyprflip" — only "Checking Hyprflip…" (Fix round 1).
+  { name: "cards-unsettled-es", page: "CardsTab.qml", lang: "es", patch: { settled: false, snapshot: {} } },
   { name: "cards-empty-en", page: "CardsTab.qml", lang: "en", patch: { emptyCards: true } },
 ]
 

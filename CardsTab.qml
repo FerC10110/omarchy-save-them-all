@@ -44,9 +44,22 @@ Column {
   onGroupsChanged: if (!selected) selectedKey = CardsModel.step(groups, selectedKey, 0)
   Component.onCompleted: selectedKey = CardsModel.step(groups, "", 0)
 
+  // No verdict yet (right after attach(), before status/snapshot land): say
+  // so, not "Cards need Hyprflip" — that would be reporting on placeholder
+  // data, same reasoning as WorkspaceTab's cardsPaused (Task 11 review).
+  Text {
+    width: parent.width
+    visible: !tab.flip.settled
+    textFormat: Text.PlainText
+    text: host.t("Checking Hyprflip…")
+    color: host.dim
+    font.family: host.fontFamily
+    font.pixelSize: Style.font.bodySmall
+  }
+
   Column {
     width: parent.width
-    visible: !tab.flip.available
+    visible: tab.flip.settled && !tab.flip.available
     spacing: Style.space(6)
 
     Text {
