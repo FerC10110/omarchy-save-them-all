@@ -25,6 +25,11 @@ var STEPS = [
     patch: { builderNotice: "Una cara admite hasta 5 ventanas.",
              draft: { mode: "create", card: null, workspace: 3, faces: [["0x1"], []], axes: ["row", "row"],
                       visible: 0, floating: null, name: "", cursor: "0x1" } } },
+  { name: "cards-en", page: "CardsTab.qml", lang: "en", patch: {} },
+  { name: "cards-es", page: "CardsTab.qml", lang: "es", patch: { cardsNotice: "Tarjeta creada." } },
+  { name: "cards-unavailable-es", page: "CardsTab.qml", lang: "es",
+    patch: { status: { available: false, reason: "no-helper", fix: "python3 ~/.local/src/hyprflip-omacards/scripts/install-setup.py --backend-only" } } },
+  { name: "cards-empty-en", page: "CardsTab.qml", lang: "en", patch: { emptyCards: true } },
 ]
 
 if (typeof module !== "undefined") module.exports = { STEPS: STEPS }

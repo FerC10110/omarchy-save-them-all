@@ -42,8 +42,8 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   // Tabs, in order, and every page by name. Later tasks add entries.
-  readonly property var tabs: ["workspace"]
-  readonly property var pages: ({ workspace: "WorkspaceTab.qml", builder: "CardBuilder.qml" })
+  readonly property var tabs: ["workspace", "cards"]
+  readonly property var pages: ({ workspace: "WorkspaceTab.qml", cards: "CardsTab.qml", builder: "CardBuilder.qml" })
   property string pageName: "workspace"
   readonly property bool onTab: tabs.indexOf(pageName) >= 0
   readonly property bool wide: pageName === "builder"
@@ -53,6 +53,7 @@ Panel {
   function tabLabel(id) {
     switch (id) {
     case "workspace": return t("Workspace")
+    case "cards": return t("Cards")
     default: return id
     }
   }

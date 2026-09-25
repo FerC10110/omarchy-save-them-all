@@ -85,6 +85,23 @@ var STRINGS = {
     "%1 closed and left the card.": "%1 se cerró y salió de la tarjeta.",
     "Changes saved.": "Cambios guardados.",
     "Card created.": "Tarjeta creada.",
+    "Cards": "Tarjetas",
+    "Unfolded": "Desplegada",
+    "Floating": "Flotante",
+    "Tiled": "Mosaico",
+    "Front: %1": "Frente: %1",
+    "Back: %1": "Reverso: %1",
+    "Cards need Hyprflip": "Las tarjetas necesitan Hyprflip",
+    "Check again": "Revisar de nuevo",
+    "Working…": "Trabajando…",
+    "No cards yet. Press n to make one.": "Todavía no hay tarjetas. Apretá n para armar una.",
+    "Flip": "Voltear",
+    "Edit": "Editar",
+    "Dismantle": "Desarmar",
+    "Creating and editing cards needs the updated Hyprflip helper.": "Crear y editar tarjetas necesita el asistente de Hyprflip actualizado.",
+    "Dismantling needs the updated Hyprflip helper.": "Desarmar necesita el asistente de Hyprflip actualizado.",
+    "v flip · e edit · d dismantle · u unfold · t float · n new": "v voltear · e editar · d desarmar · u desplegar · t flotar · n nueva",
+    "Card taken apart; its windows stay open.": "Tarjeta desarmada; sus ventanas siguen abiertas.",
   }
 }
 

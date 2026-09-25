@@ -84,6 +84,10 @@ class RenderTest(unittest.TestCase):
             'builder-new-en': ['New card', 'Front', 'Back', 'Create card', 'Windows', 'kitty · left'],
             'builder-edit-es': ['Editar tarjeta', 'Frente', 'Reverso', 'Guardar cambios', 'Cancelar'],
             'builder-notice-es': ['Una cara admite hasta 5 ventanas.', 'Nueva tarjeta', '＋ soltá acá'],
+            'cards-en': ['Notes', 'Tiled', 'Front: Calculator', 'Back: Obsidian', 'Flip', 'New card'],
+            'cards-es': ['Mosaico', 'Frente: Calculator', 'Reverso: Obsidian', 'Voltear', 'Desarmar', 'Tarjeta creada.'],
+            'cards-unavailable-es': ['Las tarjetas necesitan Hyprflip', 'El asistente de Hyprflip no está instalado'],
+            'cards-empty-en': ['No cards yet. Press n to make one.'],
         }
         for name, shown in expected.items():
             texts = self.pages[name][1]

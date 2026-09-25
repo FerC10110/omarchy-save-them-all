@@ -59,6 +59,7 @@ QtObject {
     cardsNotice = f.cardsNotice || ""
     flip.status = f.status || { available: true, reason: "ok" }
     flip.snapshot = Protocol.parseSnapshot(JSON.stringify(f.snapshot || {})).snapshot
+    if (f.emptyCards) flip.snapshot = Object.assign({}, flip.snapshot, { cards: [] })
     flip.settled = f.settled === false ? false : true
     flip.busy = f.busy === true
     flip.notice = f.notice || ""
@@ -80,4 +81,5 @@ QtObject {
   function submitDraft() {}
   function cancelBuilder() {}
   function startBuilder(card) {}
+  function cardAction(action, card) {}
 }

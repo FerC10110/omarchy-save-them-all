@@ -6,6 +6,7 @@ import "I18n.js" as I18n
 import "AppNames.js" as AppNames
 import "Builder.js" as Builder
 import "Protocol.js" as Protocol
+import "CardsModel.js" as CardsModel
 
 // Loaded once by the shell (kind "service"). It owns what outlives the
 // panel: the language, the connection to Hyprflip, the list of windows and
@@ -146,6 +147,14 @@ Scope {
     if (panel) panel.openHome()
   }
 
+  // An action on a card the panel showed: Hyprflip acts on the cards of the
+  // active workspace, so it goes there first.
+  function cardAction(action, card) {
+    if (!card) return
+    cardsNotice = ""
+    flipConnection.run(action, {}, { card: CardsModel.reference(card), workspace: card.workspace, reopen: true })
+  }
+
   function submitDraft() {
     if (!draft) return
     if (!Builder.ready(draft)) { builderNotice = t("Put at least one window on each side."); return }
@@ -184,6 +193,7 @@ Scope {
         builderNotice = message || t("The card could not be made.")
       }
     }
+    if (action === "unpair" && ok) cardsNotice = t("Card taken apart; its windows stay open.")
   }
 
   Hyprflip {
