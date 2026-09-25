@@ -89,6 +89,32 @@ class FallbackTest(ScriptTest):
         self.assertTrue(out['notes'][0].startswith('Card Calculator ↔ Obsidian could not be grouped: '), out['notes'])
         self.assertIn('could not be grouped', (self.state_dir / 'restore.log').read_text())
 
+    def test_a_window_closed_since_still_builds_with_the_live_ones(self):
+        # 0x3 (Obsidian) was open when --addresses was captured but has since
+        # closed: absent from `clients`, just like a window present() never saw.
+        out = self.fallback([card([1], [2, 3])],
+                            clients=[client('0x1', 'kitty'), client('0x2', 'org.gnome.Calculator'),
+                                     client('0x4', 'weird')])
+        self.assertEqual(out, {'built': 1, 'kept': 0, 'notes': []})
+        self.assertEqual(sorted(self.clients_by_address()['0x2']['grouped']), ['0x2', '0x4'])
+
+    def test_a_side_closed_entirely_since_is_not_built(self):
+        # 0x3 (Obsidian), the whole back side, closed since --addresses was
+        # captured: no live window to group, so the card is left alone, not crashed.
+        out = self.fallback([card([1], [2])],
+                            clients=[client('0x1', 'kitty'), client('0x2', 'org.gnome.Calculator'),
+                                     client('0x4', 'weird')])
+        self.assertEqual(out['notes'], ['Card Calculator ↔ Obsidian was not rebuilt: one of its sides has none of its windows open'])
+        self.assertEqual(self.dispatches(), [])
+
+    def test_a_failed_grouping_rolls_back_the_parked_and_joined_windows(self):
+        out = self.fallback([card([1], [2])], fail=['preselect'])
+        self.assertEqual(out['built'], 0)
+        self.assertTrue(out['notes'][0].startswith('Card Calculator ↔ Obsidian could not be grouped: '), out['notes'])
+        c = self.clients_by_address()
+        self.assertEqual([a for a in ('0x2', '0x3') if c[a]['workspace']['name'] == 'special:savethemall'], [])
+        self.assertEqual([a for a in ('0x2', '0x3') if c[a]['grouped']], [])
+
     def test_ungroup_releases_every_group(self):
         self.hypr_state(clients=[
             client('0x1', 'a', grouped=['0x1', '0x2']), client('0x2', 'b', hidden=True, grouped=['0x1', '0x2']),

@@ -627,35 +627,75 @@ def layout(args):
 
 # -- restoring without Hyprflip: native groups ----------------------------------
 
+def undo_group(members, ws):
+    """Best-effort rollback of a card whose grouping failed partway: send
+    every member still away from `ws` back to it, then let go of whatever
+    group formed, the same way `ungroup` does — so nothing stays parked on
+    the special workspace or hidden in a half-built group. Its own dispatch
+    failures are swallowed: a rollback must never hide the error that
+    triggered it."""
+    try:
+        now = clients()
+    except CardsError:
+        return
+    for a in members:
+        c = now.get(a)
+        if c and c.get('workspace', {}).get('id') != ws:
+            try:
+                dispatch(move_to(a, ws))
+            except CardsError:
+                pass
+    for _ in range(len(members) + 1):
+        try:
+            now = clients()
+        except CardsError:
+            return
+        grouped = [now[a] for a in members if a in now and now[a].get('grouped')]
+        if not grouped:
+            return
+        shown = next((c for c in grouped if not c.get('hidden')), grouped[0])
+        try:
+            dispatch(focus(shown['address']))
+            dispatch('hl.dsp.window.move({ out_of_group = true })')
+        except CardsError:
+            return
+
+
 def build_group(card, faces, ws, now):
     """One card as a native group in its slot: every window a tab, the
-    visible side's first window in front, floating where it was."""
+    visible side's first window in front, floating where it was. A failure
+    while building is rolled back by undo_group(), so nothing stays parked
+    or half-grouped."""
     members = faces[0] + faces[1]
     slot, shown = faces[0][0], faces[card['visible']][0]
-    for a in members:
-        if now[a].get('floating'):
-            # Tiled first: Hyprflip's own helper un-floats with action = "disable".
-            dispatch(f"hl.dsp.window.float({{ window = 'address:{a}', action = 'disable' }})")
-    dispatch(focus(slot))
-    dispatch('hl.dsp.group.toggle()')
-    current = slot
-    for m in members:
-        if m == slot:
-            continue
-        # Out, and back in to the right of the group; then into the group on
-        # its left. A window joins the group next to it: this makes it ours.
-        dispatch(move_to(m, PARKING))
-        time.sleep(PAUSE)
-        dispatch(focus(current))
-        dispatch("hl.dsp.layout('preselect r')")
-        dispatch(move_to(m, ws))
-        time.sleep(PAUSE)
-        dispatch(focus(m))
-        dispatch("hl.dsp.window.move({ into_group = 'l' })")
-        current = m
-    group = clients().get(slot, {}).get('grouped') or []
-    if sorted(group) != sorted(members):
-        raise CardsError(msg('the group came out with %1 of its %2 windows', len(group), len(members)))
+    try:
+        for a in members:
+            if now[a].get('floating'):
+                # Tiled first: Hyprflip's own helper un-floats with action = "disable".
+                dispatch(f"hl.dsp.window.float({{ window = 'address:{a}', action = 'disable' }})")
+        dispatch(focus(slot))
+        dispatch('hl.dsp.group.toggle()')
+        current = slot
+        for m in members:
+            if m == slot:
+                continue
+            # Out, and back in to the right of the group; then into the group on
+            # its left. A window joins the group next to it: this makes it ours.
+            dispatch(move_to(m, PARKING))
+            time.sleep(PAUSE)
+            dispatch(focus(current))
+            dispatch("hl.dsp.layout('preselect r')")
+            dispatch(move_to(m, ws))
+            time.sleep(PAUSE)
+            dispatch(focus(m))
+            dispatch("hl.dsp.window.move({ into_group = 'l' })")
+            current = m
+        group = clients().get(slot, {}).get('grouped') or []
+        if sorted(group) != sorted(members):
+            raise CardsError(msg('the group came out with %1 of its %2 windows', len(group), len(members)))
+    except CardsError:
+        undo_group(members, ws)
+        raise
     # Focus is on the group (its last tab); bring the visible side forward.
     dispatch(f'hl.dsp.group.active({{ index = {group.index(shown) + 1} }})')
     if card['floating'] is not None:
@@ -677,13 +717,20 @@ def fallback_cards(filename, windows, cards, problem, addresses, notes=None):
         return result
     for card in cards:
         title = saved_title(card, windows)
-        faces = present(card, addresses)
+        try:
+            now = clients()
+        except CardsError as error:
+            result['notes'].append(note(msg('Card %1 could not be grouped: %2', title, error)))
+            continue
+        # A window that closed between --addresses being captured and this
+        # call is absent from `now`: treated the same as one present() never
+        # found open, not as a reason to crash.
+        faces = [[a for a in f if a in now] for f in present(card, addresses)]
         if not all(faces):
             result['notes'].append(note(msg('Card %1 was not rebuilt: one of its sides has none of its windows open', title)))
             continue
         members = faces[0] + faces[1]
         try:
-            now = clients()
             groups = [now.get(a, {}).get('grouped') or [] for a in members]
             if all(sorted(g) == sorted(members) for g in groups):
                 result['kept'] += 1
