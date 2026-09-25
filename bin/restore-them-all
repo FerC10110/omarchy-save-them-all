@@ -56,14 +56,30 @@ dispatch() {
   hyprctl dispatch "$1" >/dev/null
 }
 
+# One line in restore.log, timestamped like bin/cards' own note() log: what
+# went wrong with cards, kept even when the notification is not shown.
+log_line() { # $1 text
+  printf '%s %s\n' "$(date -Is)" "$1" >>"$LOG" 2>/dev/null || true
+}
+
+# Focus a workspace and wait (up to 2.5s) for Hyprland to catch up: the tree
+# is rebuilt by focusing windows, which only works on the workspace on
+# screen. 0 once it is active; 1 if it never becomes active (something else
+# -- a window's own rule, or the user -- keeps the focus away from it).
+focus_ws() { # $1 target workspace
+  local target=$1
+  dispatch "hl.dsp.focus({ workspace = '$target' })"
+  for _ in {1..25}; do
+    [[ $(hyprctl -j activeworkspace | jq -r '.id') == "$target" ]] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
 # The tree is rebuilt by focusing windows, which only works on the workspace
 # on screen, so restoring another workspace means going there first.
 if [[ -n $TARGET_WS ]]; then
-  dispatch "hl.dsp.focus({ workspace = '$TARGET_WS' })"
-  for _ in {1..25}; do
-    [[ $(hyprctl -j activeworkspace | jq -r '.id') == "$TARGET_WS" ]] && break
-    sleep 0.1
-  done
+  focus_ws "$TARGET_WS" || true
 fi
 
 ws=$(hyprctl -j activeworkspace | jq -r '.id')
@@ -477,13 +493,26 @@ fi
 # ---------- 3. Cards ----------
 card_notes=()
 if [[ $has_cards == yes ]]; then
-  sub=fallback
-  if "$BIN_DIR/cards" status 2>>"$LOG" | jq -e '.available == true' >/dev/null; then sub=rebuild; fi
-  if out=$("$BIN_DIR/cards" "$sub" --file "$file" --addresses "$addresses" 2>>"$LOG"); then
-    mapfile -t card_notes < <(jq -r '.notes[]' <<<"$out")
-    echo "cards: $(jq -r '"\(.built) built, \(.kept) already there"' <<<"$out")"
+  # bin/cards rebuild/fallback act on whatever workspace is active right now
+  # (Hyprflip's own context, or active_workspace() for a native group).
+  # Step 1 can take a while per window and step 2 only refocuses $ws by
+  # accident (a neighbour's focus while unparking, skipped entirely with at
+  # most one tiled window), so a window's own workspace rule, or the user,
+  # may have moved focus elsewhere by now -- get $ws back on screen first,
+  # the same way --workspace does at the top.
+  if focus_ws "$ws"; then
+    sub=fallback
+    if "$BIN_DIR/cards" status 2>>"$LOG" | jq -e '.available == true' >/dev/null; then sub=rebuild; fi
+    if out=$("$BIN_DIR/cards" "$sub" --file "$file" --addresses "$addresses" 2>>"$LOG"); then
+      mapfile -t card_notes < <(jq -r '.notes[]' <<<"$out")
+      echo "cards: $(jq -r '"\(.built) built, \(.kept) already there"' <<<"$out")"
+    else
+      card_notes+=("$(msg "Cards were not rebuilt: see %1" "$LOG")")
+    fi
   else
-    card_notes+=("$(msg "Cards were not rebuilt: see %1" "$LOG")")
+    note=$(msg "Cards were not rebuilt: workspace %1 would not stay focused" "$ws")
+    log_line "$note"
+    card_notes+=("$note")
   fi
 fi
 

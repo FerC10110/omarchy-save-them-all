@@ -50,7 +50,10 @@ def dissolve(members):
 def apply(expr):
     active = state.get('active')
     if m := re.fullmatch(r"hl\.dsp\.focus\(\{ workspace = '(-?\d+)' \}\)", expr):
-        state['active_workspace'] = int(m[1])
+        # refuse_focus: workspace ids (as strings) a focus dispatch can never
+        # switch to -- simulates something else refusing to give up focus.
+        if m[1] not in (state.get('refuse_focus') or []):
+            state['active_workspace'] = int(m[1])
     elif m := re.fullmatch(r"hl\.dsp\.focus\(\{ window = '" + ADDR + r"' \}\)", expr):
         state['active'] = m[1]
     elif re.fullmatch(r"hl\.dsp\.layout\('preselect [rdlu]'\)", expr):
@@ -138,6 +141,14 @@ if args[:1] == ['dispatch'] and len(args) == 2:
         print('error: fake failure')
         sys.exit(1)
     apply(expr)
+    # drift: {"after": N, "to": W} -- once N dispatches have gone through,
+    # the active workspace silently changes to W, one time only. Simulates a
+    # window's own rule (or the user) stealing focus mid-restore, without
+    # any real concurrency in the test.
+    drift = state.get('drift')
+    if drift and len(state['dispatches']) == drift.get('after'):
+        state['active_workspace'] = drift.get('to')
+        state['drift'] = None
     save()
     print('ok')
     sys.exit(0)
