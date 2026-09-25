@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""Record a notification instead of showing it: {"notify": [title, body]}."""
+import json
+import os
+import sys
+
+args = sys.argv[1:]
+if args[:1] == ['-g']:
+    args = args[2:]
+with open(os.environ['FAKE_LOG'], 'a') as f:
+    f.write(json.dumps({'notify': args}) + '\n')

@@ -1,0 +1,10 @@
+#!/bin/bash
+# Every test of the plugin: node for the QML's JS, unittest for the scripts,
+# bin/cards and the offscreen render. Nothing here touches the real desktop.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+export PYTHONDONTWRITEBYTECODE=1
+if compgen -G 'tests/*.test.js' >/dev/null; then
+  node --test tests/
+fi
+python3 -m unittest discover -s tests -p 'test_*.py' "$@"

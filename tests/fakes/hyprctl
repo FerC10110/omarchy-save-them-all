@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""A stand-in for hyprctl that reads and writes a JSON file instead of talking
+to Hyprland. Tests put tests/fakes first in PATH and point FAKE_HYPR_STATE at
+their own copy. It answers the queries Save Them All makes and applies the
+dispatches it sends, closely enough for the scripts to see their effect; any
+other dispatch is recorded and answered "ok"."""
+import json
+import os
+import re
+import sys
+
+path = os.environ.get('FAKE_HYPR_STATE')
+if not path:
+    print('fake hyprctl: FAKE_HYPR_STATE is not set', file=sys.stderr)
+    sys.exit(1)
+with open(path) as f:
+    state = json.load(f)
+clients = {c['address']: c for c in state.setdefault('clients', [])}
+ADDR = r"address:(0x[0-9a-f]+)"
+
+
+def save():
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(state, f)
+    os.replace(tmp, path)
+
+
+def answer(value):
+    print(json.dumps(value))
+    sys.exit(0)
+
+
+def regroup(members, current):
+    """A native group: every member lists the group; only the current one shows."""
+    for a in members:
+        clients[a]['grouped'] = list(members)
+        clients[a]['hidden'] = a != current
+
+
+def dissolve(members):
+    for a in members:
+        clients[a]['grouped'] = []
+        clients[a]['hidden'] = False
+
+
+def apply(expr):
+    active = state.get('active')
+    if m := re.fullmatch(r"hl\.dsp\.focus\(\{ workspace = '(-?\d+)' \}\)", expr):
+        state['active_workspace'] = int(m[1])
+    elif m := re.fullmatch(r"hl\.dsp\.focus\(\{ window = '" + ADDR + r"' \}\)", expr):
+        state['active'] = m[1]
+    elif re.fullmatch(r"hl\.dsp\.layout\('preselect [rdlu]'\)", expr):
+        state['anchor'] = active
+    elif m := re.fullmatch(r"hl\.dsp\.window\.move\(\{ window = '" + ADDR + r"', workspace = '([^']+)', follow = false \}\)", expr):
+        target = m[2]
+        wid = -98 if target.startswith('special:') else int(target)
+        clients[m[1]]['workspace'] = {'id': wid, 'name': target}
+        if wid > 0 and state.get('anchor'):
+            state.setdefault('left_of', {})[m[1]] = state['anchor']
+        state['anchor'] = None
+    elif m := re.fullmatch(r"hl\.dsp\.window\.resize\(\{ window = '" + ADDR + r"', x = (-?\d+), y = (-?\d+), relative = true \}\)", expr):
+        size = clients[m[1]]['size']
+        clients[m[1]]['size'] = [size[0] + int(m[2]), size[1] + int(m[3])]
+    elif m := re.fullmatch(r"hl\.dsp\.window\.resize\(\{ window = '" + ADDR + r"', x = (-?\d+), y = (-?\d+), exact = true \}\)", expr):
+        clients[m[1]]['size'] = [int(m[2]), int(m[3])]
+    elif m := re.fullmatch(r"hl\.dsp\.window\.move\(\{ window = '" + ADDR + r"', x = (-?\d+), y = (-?\d+), exact = true \}\)", expr):
+        clients[m[1]]['at'] = [int(m[2]), int(m[3])]
+    elif m := re.fullmatch(r"hl\.dsp\.window\.float\(\{ window = '" + ADDR + r"', state = 'on' \}\)", expr):
+        clients[m[1]]['floating'] = True
+    elif expr == 'hl.dsp.group.toggle()' and active in clients:
+        if clients[active].get('grouped'):
+            dissolve(clients[active]['grouped'])
+        else:
+            regroup([active], active)
+    elif re.fullmatch(r"hl\.dsp\.window\.move\(\{ into_group = ['\"]l['\"] \}\)", expr) and active in clients:
+        target = state.get('left_of', {}).get(active)
+        group = clients[target].get('grouped') if target in clients else None
+        if group and active not in group:
+            regroup(group + [active], active)
+    elif expr == 'hl.dsp.window.move({ out_of_group = true })' and active in clients:
+        group = clients[active].get('grouped') or []
+        rest = [a for a in group if a != active]
+        dissolve([active])
+        if rest:
+            regroup(rest, rest[0])
+    elif (m := re.fullmatch(r"hl\.dsp\.group\.active\(\{ index = (\d+) \}\)", expr)) and active in clients:
+        group = clients[active].get('grouped') or []
+        k = int(m[1])
+        if 1 <= k <= len(group):
+            regroup(group, group[k - 1])
+            state['active'] = group[k - 1]
+
+
+args = sys.argv[1:]
+if args[:1] == ['-j']:
+    args = args[1:]
+command = ' '.join(args)
+ws = state.get('active_workspace', 1)
+
+if command == 'clients':
+    answer(state['clients'])
+if command == 'activeworkspace':
+    answer({'id': ws, 'name': str(ws), 'monitor': state.get('monitor', 'DP-1')})
+if command == 'activewindow':
+    answer(clients.get(state.get('active'), {}))
+if command == 'workspaces':
+    ids = sorted({c['workspace']['id'] for c in state['clients']} | {ws})
+    answer([{'id': i, 'name': str(i), 'tiledLayout': 'dwindle'} for i in ids])
+if command == 'plugin list':
+    answer([{'name': n, 'version': '0.3.0', 'description': ''} for n in state.get('plugins', [])])
+if command == 'version':
+    v = state.get('version', '0.56.2')
+    answer({'tag': 'v' + v, 'version': v})
+if command == 'configerrors':
+    print(state.get('configerrors', ''))
+    sys.exit(0)
+if command == 'hyprflip status':
+    if 'hyprflip' not in state.get('plugins', []) or state.get('hyprflip') is None:
+        print('unknown request')
+        sys.exit(0)
+    answer(state['hyprflip'])
+if args[:1] == ['hyprflip']:
+    state.setdefault('dispatches', []).append('hyprflip ' + ' '.join(args[1:]))
+    save()
+    print('ok')
+    sys.exit(0)
+if args[:1] == ['dispatch'] and len(args) == 2:
+    expr = args[1]
+    state.setdefault('dispatches', []).append(expr)
+    if any(f in expr for f in state.get('fail', [])):
+        save()
+        print('error: fake failure')
+        sys.exit(1)
+    apply(expr)
+    save()
+    print('ok')
+    sys.exit(0)
+print(f'fake hyprctl: unsupported command: {command}', file=sys.stderr)
+sys.exit(2)
