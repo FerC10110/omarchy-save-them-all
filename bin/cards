@@ -4,6 +4,7 @@
     cards status                                 can Hyprflip be used; if not, why and how to fix it
     cards members  --workspace N [--previous F]  hidden windows of the workspace's cards, to save too
     cards capture  --workspace N --addresses A   the workspace's cards, as indices into the saved windows
+    cards preserve --previous F --windows W      the previous save's cards, moved onto the windows saved now
     cards name     --id N --name TEXT            remember a card's name for this Hyprland session
 
 Every command prints one JSON value. A (--addresses) is a JSON list aligned
@@ -540,6 +541,44 @@ def capture(args):
         cards.append({'name': names.get(str(card.get('id')), ''), 'faces': faces,
                       'visible': 1 if card.get('active') == 1 else 0, 'floating': floating})
     return {'cards': cards, 'notes': notes}
+
+
+@command('preserve')
+def preserve(args):
+    """The cards of the previous save, moved onto the windows saved now. A
+    window matches one with the same class and the same launcher, in order;
+    a card that lost a window is dropped, and the notes say so."""
+    path = Path(args.previous or '')
+    old, cards, problem = read_file(path)
+    try:
+        new = json.loads(args.windows or '')
+    except ValueError:
+        new = None
+    if not isinstance(new, list):
+        raise CardsError(msg('--windows must be a JSON list of saved windows'))
+    if problem:
+        return {'cards': [], 'notes': [msg('The cards saved before were ignored: %1', problem)] if path.is_file() else []}
+
+    def key(w):
+        return (w.get('class'), json.dumps(w.get('launch'), sort_keys=True)) if isinstance(w, dict) else None
+    pools = {}
+    for i, w in enumerate(new):
+        pools.setdefault(key(w), []).append(i)
+    mapping, taken = {}, {}
+    for i, w in enumerate(old):
+        k = key(w)
+        n = taken.get(k, 0)
+        if k is not None and n < len(pools.get(k, [])):
+            mapping[i] = pools[k][n]
+            taken[k] = n + 1
+    kept, notes = [], []
+    for card in cards:
+        if all(i in mapping for f in card['faces'] for i in f['windows']):
+            kept.append({**card, 'faces': [{**f, 'windows': [mapping[i] for i in f['windows']]}
+                                           for f in card['faces']]})
+        else:
+            notes.append(msg('Card %1 was not kept: some of its windows are no longer saved', saved_title(card, old)))
+    return {'cards': kept, 'notes': notes}
 
 
 def main(argv=None):

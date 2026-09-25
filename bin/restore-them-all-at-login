@@ -51,7 +51,8 @@ list() {
   local files=("$STATE_DIR"/workspace-*.json)
   [[ -e ${files[0]} ]] || { echo '[]'; return; }
   jq -s '[.[] | select(.workspace != null and (.windows | type) == "array")
-          | {workspace, windows: (.windows | length), saved_at, autostart: (.autostart == true)}]
+          | {workspace, windows: (.windows | length), cards: (if (.cards | type) == "array" then (.cards | length) else 0 end),
+             saved_at, autostart: (.autostart == true)}]
          | sort_by(.workspace)' "${files[@]}"
 }
 

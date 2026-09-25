@@ -36,5 +36,11 @@
   "--workspace must be a workspace number": "--workspace tiene que ser un número de escritorio",
   "--addresses must be a JSON list of window addresses or null": "--addresses tiene que ser una lista JSON de direcciones de ventana o null",
   "%1 left card %2: it is not among the saved windows": "%1 salió de la tarjeta %2: no está entre las ventanas guardadas",
-  "Card %1 was not saved: one of its sides has no saved window": "La tarjeta %1 no se guardó: una de sus caras no tiene ninguna ventana guardada"
+  "Card %1 was not saved: one of its sides has no saved window": "La tarjeta %1 no se guardó: una de sus caras no tiene ninguna ventana guardada",
+  "--windows must be a JSON list of saved windows": "--windows tiene que ser una lista JSON de ventanas guardadas",
+  "The cards saved before were ignored: %1": "Se ignoraron las tarjetas guardadas antes: %1",
+  "Card %1 was not kept: some of its windows are no longer saved": "La tarjeta %1 no se conservó: algunas de sus ventanas ya no se guardan",
+  "Hyprflip did not answer; the cards saved before were kept": "Hyprflip no respondió; se conservaron las tarjetas guardadas antes",
+  "Saved %1 windows and 1 card from workspace %2": "Se guardaron %1 ventanas y 1 tarjeta del escritorio %2",
+  "Saved %1 windows and %2 cards from workspace %3": "Se guardaron %1 ventanas y %2 tarjetas del escritorio %3"
 }

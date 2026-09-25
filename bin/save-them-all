@@ -193,12 +193,27 @@ launch_of() { # $1 window json -> launch json, or null when nothing can reopen i
 
 ws=$(hyprctl -j activeworkspace | jq -r '.id')
 monitor=$(hyprctl -j activeworkspace | jq -r '.monitor')
+out="$STATE_DIR/workspace-$ws.json"
+
+# A card hides the windows of its other side, and those are saved too: with
+# Hyprflip, the members of the workspace's cards; without it, the hidden
+# windows of native groups whose class belonged to a card saved before.
+flip=$("$BIN_DIR/cards" status 2>/dev/null | jq -r '.available == true' 2>/dev/null || echo false)
+if [[ $flip == true ]]; then
+  members=$("$BIN_DIR/cards" members --workspace "$ws" 2>/dev/null) || members='[]'
+else
+  members=$("$BIN_DIR/cards" members --workspace "$ws" --previous "$out" 2>/dev/null) || members='[]'
+fi
+
 # Order = left to right, top to bottom: this is what reproduces the dwindle tree.
-clients=$(hyprctl -j clients | jq -c --argjson ws "$ws" --arg ex "$EXCLUDE_CLASSES" \
-  '[.[] | select(.workspace.id == $ws and .mapped and ((.hidden // false) | not) and ((.class // "") | test($ex) | not))]
-   | sort_by(.at[0], .at[1]) | .[]')
+clients=$(hyprctl -j clients | jq -c --argjson ws "$ws" --arg ex "$EXCLUDE_CLASSES" --argjson members "$members" '
+  [.[] | select(.workspace.id == $ws and .mapped
+                and (((.hidden // false) | not) or (.address as $a | $members | index($a) != null))
+                and ((.class // "") | test($ex) | not))]
+  | sort_by(.at[0], .at[1]) | .[]')
 
 entries='[]'
+addresses='[]'
 lines=()
 while IFS= read -r w; do
   [[ -n $w ]] || continue
@@ -207,6 +222,7 @@ while IFS= read -r w; do
   [[ $launch != null ]] || echo "no desktop entry for $cls: restoring arranges it when open, but cannot reopen it" >&2
   entry=$(jq -c --argjson l "$launch" '{class, title: (.title // ""), launch: $l, at, size, floating}' <<<"$w")
   entries=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$entries")
+  addresses=$(jq -c --arg a "$(jq -r .address <<<"$w")" '. + [$a]' <<<"$addresses")
   lines+=("$(jq -r '"\(.size[0])x\(.size[1]) @\(.at[0]),\(.at[1])  \(.class)  ->  \(
     .launch | if . == null then "not reopened" else [.kind, (.session // .url // .desktop // empty)] | join(" ") end)"' <<<"$entry")")
 done <<<"$clients"
@@ -218,16 +234,44 @@ if ((n == 0)); then
   exit 1
 fi
 
+# The cards: asked to Hyprflip, or kept from the previous save when Hyprflip
+# is not there to ask. bin/cards prints {cards, notes}.
+none='{"cards":[],"notes":[]}'
+result=$none
+if [[ $flip == true ]]; then
+  if ! result=$("$BIN_DIR/cards" capture --workspace "$ws" --addresses "$addresses" 2>/dev/null); then
+    result=$("$BIN_DIR/cards" preserve --previous "$out" --windows "$entries" 2>/dev/null) || result=$none
+    result=$(jq -c --arg n "$(msg "Hyprflip did not answer; the cards saved before were kept")" '.notes += [$n]' <<<"$result")
+  fi
+elif [[ -f $out ]]; then
+  result=$("$BIN_DIR/cards" preserve --previous "$out" --windows "$entries" 2>/dev/null) || result=$none
+fi
+cards=$(jq -c '.cards' <<<"$result")
+notes=$(jq -r '.notes[]' <<<"$result")
+k=$(jq length <<<"$cards")
+
 mkdir -p "$STATE_DIR"
-out="$STATE_DIR/workspace-$ws.json"
 # Saving again replaces the windows, not the choice to restore them at login.
 autostart=$(jq -r 'if .autostart == true then "true" else "false" end' "$out" 2>/dev/null || echo false)
 tmp=$(mktemp "$STATE_DIR/.save.XXXXXX")
 jq -n --argjson ws "$ws" --arg monitor "$monitor" --arg saved_at "$(date -Is)" \
-  --argjson autostart "$autostart" --argjson windows "$entries" \
-  '{workspace: $ws, monitor: $monitor, saved_at: $saved_at, autostart: $autostart, windows: $windows}' >"$tmp"
+  --argjson autostart "$autostart" --argjson windows "$entries" --argjson cards "$cards" \
+  '{workspace: $ws, monitor: $monitor, saved_at: $saved_at, autostart: $autostart, windows: $windows}
+   + (if ($cards | length) > 0 then {cards: $cards} else {} end)' >"$tmp"
 mv "$tmp" "$out"
 
 printf '%s\n' "${lines[@]}"
 echo "Saved: $out"
-((QUIET)) || notify "$(msg "Saved %1 windows from workspace %2" "$n" "$ws")" "$(printf '%s\n' "${lines[@]}" | awk '{print $3}' | paste -sd ', ')"
+if ((k == 0)); then
+  title=$(msg "Saved %1 windows from workspace %2" "$n" "$ws")
+elif ((k == 1)); then
+  title=$(msg "Saved %1 windows and 1 card from workspace %2" "$n" "$ws")
+else
+  title=$(msg "Saved %1 windows and %2 cards from workspace %3" "$n" "$k" "$ws")
+fi
+body=$(printf '%s\n' "${lines[@]}" | awk '{print $3}' | paste -sd ', ')
+[[ -z $notes ]] || echo "$notes" >&2
+# A card left out is news even when the panel asked for quiet.
+if ((!QUIET)) || [[ -n $notes ]]; then
+  notify "$title" "$body${notes:+$'\n'$notes}"
+fi
