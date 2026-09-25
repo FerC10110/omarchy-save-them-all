@@ -20,6 +20,8 @@ Panel {
 
   property var anchorItem: null
   property var hostWidget: null
+  property var service: null
+  onServiceChanged: if (service && opened) service.attach(root)
 
   property var record: null
   property string lastError: ""
@@ -103,6 +105,11 @@ Panel {
     run("save", "save-them-all")
   }
 
+  // Hyprflip asks for the keyboard back while it works (a "handoff"); the
+  // service shows the panel again when the action ends.
+  function dismiss() { close() }
+  function reveal() { open() }
+
   function restore() {
     if (!hasSaved) return
     run("restore", "restore-them-all")
@@ -147,20 +154,13 @@ Panel {
   }
 
   onOpenedChanged: if (opened) {
+    if (service) service.attach(root)
     refreshLogin()
     browserQuitError = ""
     refreshBrowserQuit()
   }
 
-  // The shell loads this panel when the session starts, which makes it the
-  // place to bring marked layouts back. The script decides whether this is the
-  // first start of the session, so shell restarts and plugin reloads that load
-  // the panel again do nothing. It runs detached: a restore takes a while and
-  // must not die with the panel if the shell reloads halfway through.
-  Component.onCompleted: {
-    refreshLogin()
-    Quickshell.execDetached([pluginPath("bin/restore-them-all-at-login")])
-  }
+  Component.onCompleted: refreshLogin()
 
   // The scripts own the state file, so the panel simply reads whatever is
   // there — including layouts saved from the menu, a keybinding or a terminal.
@@ -186,6 +186,7 @@ Panel {
 
   Process {
     id: proc
+    environment: ({ SAVE_THEM_ALL_LANG: root.service ? root.service.lang : "" })
     stderr: StdioCollector {
       waitForEnd: true
       onStreamFinished: {

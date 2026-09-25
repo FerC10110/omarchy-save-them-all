@@ -10,6 +10,18 @@
 
 var STRINGS = {
   es: {
+    "Hyprland is not answering, so cards are paused.": "Hyprland no responde, así que las tarjetas están en pausa.",
+    "Hyprflip is not loaded. Install it with: %1": "Hyprflip no está cargado. Instalalo con: %1",
+    "Hyprflip did not load: Hyprland is %1 and Hyprflip was built for %2. Rebuild it with: %3": "Hyprflip no cargó: Hyprland es %1 y Hyprflip se compiló para %2. Recompilalo con: %3",
+    "The Hyprflip helper is not installed. Install it with: %1": "El asistente de Hyprflip no está instalado. Instalalo con: %1",
+    "The Hyprflip helper speaks another protocol. Update it with: %1": "El asistente de Hyprflip habla otro protocolo. Actualizalo con: %1",
+    "The Hyprflip helper reports: %1": "El asistente de Hyprflip dice: %1",
+    "Checking Hyprflip…": "Revisando Hyprflip…",
+    "The Hyprflip helper sent an unreadable answer.": "El asistente de Hyprflip mandó una respuesta ilegible.",
+    "Could not switch to workspace %1.": "No se pudo pasar al escritorio %1.",
+    "That card changed; look at it again.": "Esa tarjeta cambió; volvé a mirarla.",
+    "Hyprflip asked something this panel cannot answer; the action was cancelled.": "Hyprflip preguntó algo que este panel no sabe responder; se canceló la acción.",
+    "The Hyprflip helper stopped. Try again.": "El asistente de Hyprflip se detuvo. Probá de nuevo.",
   }
 }
 

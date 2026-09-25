@@ -12,6 +12,9 @@ BarWidget {
   id: root
   moduleName: "io.github.ferc10110.save-them-all"
 
+  // The plugin's service (Service.qml), shared by every bar and monitor.
+  readonly property var service: bar && bar.shell ? bar.shell.serviceFor("io.github.ferc10110.save-them-all") : null
+
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
   readonly property bool hasSaved: panelLoader.item ? panelLoader.item.hasSaved === true : false
   readonly property bool busy: panelLoader.item ? panelLoader.item.busy === true : false
@@ -48,6 +51,7 @@ BarWidget {
     if ("settings" in target) target.settings = root.settings
     if ("anchorItem" in target) target.anchorItem = button
     if ("hostWidget" in target) target.hostWidget = root
+    if ("service" in target) target.service = root.service
   }
 
   implicitWidth: button.implicitWidth
@@ -55,6 +59,7 @@ BarWidget {
 
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
+  onServiceChanged: injectPanel()
 
   Loader {
     id: panelLoader
