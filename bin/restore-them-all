@@ -7,6 +7,10 @@
 
 set -euo pipefail
 
+BIN_DIR=$(dirname "$(readlink -f "$0")")
+# shellcheck source=lib/i18n.sh
+source "$BIN_DIR/lib/i18n.sh"
+
 STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
 TIMEOUT="${SAVE_THEM_ALL_TIMEOUT:-25}"
 PARKING="special:savethemall"   # hidden workspace where windows wait while the tree is rebuilt
@@ -63,13 +67,13 @@ fi
 
 ws=$(hyprctl -j activeworkspace | jq -r '.id')
 if [[ -n $TARGET_WS && $ws != "$TARGET_WS" ]]; then
-  echo "Could not switch to workspace $TARGET_WS" >&2
+  msg "Could not switch to workspace %1" "$TARGET_WS" >&2
   exit 1
 fi
 file="$STATE_DIR/workspace-$ws.json"
 if [[ ! -f $file ]]; then
-  notify "Nothing saved for workspace $ws" "Run 'Save them all' first"
-  echo "No such file: $file" >&2
+  notify "$(msg "Nothing saved for workspace %1" "$ws")" "$(msg "Run 'Save them all' first")"
+  msg "No such file: %1" "$file" >&2
   exit 1
 fi
 active_before=$(hyprctl -j activewindow | jq -r '.address // empty')
@@ -299,7 +303,7 @@ if ! windows=$(read_windows "$file" 2>&1); then
   problem=${windows##*$'\n'}   # the windows checked before it come first
   problem=${problem#jq: }
   problem=${problem#error (at *): }
-  notify "Cannot restore workspace $ws" "$(basename "$file"): $problem"
+  notify "$(msg "Cannot restore workspace %1" "$ws")" "$(basename "$file"): $problem"
   echo "restore-them-all: $file: $problem" >&2
   exit 1
 fi
@@ -350,12 +354,12 @@ for i in "${!entries[@]}"; do
   fi
   if [[ $l == null ]]; then
     echo "no launcher: $cls" >&2
-    missing+=("$cls (no launcher)")
+    missing+=("$cls $(msg "(no launcher)")")
     continue
   fi
   if [[ $(jq -r .kind <<<"$l") == app ]] && ! app_installed "$(jq -r .desktop <<<"$l")"; then
     echo "not installed: $(describe "$l")" >&2
-    missing+=("$cls (not installed)")
+    missing+=("$cls $(msg "(not installed)")")
     continue
   fi
   before=$(printf '%s\n' "${existing[@]}")
@@ -365,7 +369,7 @@ for i in "${!entries[@]}"; do
     sleep 1   # grace period: an app that fails to start maps a window and closes it right away
     if ! addresses_of "$cls" | grep -qx "$addr"; then
       echo "closed itself: $cls" >&2
-      missing+=("$cls (closed itself)")
+      missing+=("$cls $(msg "(closed itself)")")
       continue
     fi
     addrs[$i]=$addr
@@ -431,11 +435,11 @@ if [[ -n $active_before ]] && clients_on_ws | jq -e --arg a "$active_before" 'an
   dispatch "hl.dsp.focus({ window = 'address:$active_before' })"
 fi
 
-summary="$opened opened, $skipped already there"
+summary=$(msg "%1 opened, %2 already there" "$opened" "$skipped")
 if ((${#missing[@]})); then
-  notify "Windows: ${#missing[@]} missing" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')"
-  echo "$summary; missing: ${missing[*]}" >&2
+  notify "$(msg "Windows: %1 missing" "${#missing[@]}")" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')"
+  msg "%1; missing: %2" "$summary" "${missing[*]}" >&2
   exit 1
 fi
 echo "$summary"
-((QUIET)) || notify "Windows restored on workspace $ws" "$summary"
+((QUIET)) || notify "$(msg "Windows restored on workspace %1" "$ws")" "$summary"

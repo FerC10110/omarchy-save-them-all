@@ -8,6 +8,10 @@
 
 set -euo pipefail
 
+BIN_DIR=$(dirname "$(readlink -f "$0")")
+# shellcheck source=lib/i18n.sh
+source "$BIN_DIR/lib/i18n.sh"
+
 STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
 IFS=: read -r -a DATA_DIRS <<<"${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 APPS_DIRS=("${DATA_DIRS[@]/%//applications}")
@@ -209,8 +213,8 @@ done <<<"$clients"
 
 n=$(jq length <<<"$entries")
 if ((n == 0)); then
-  notify "Nothing to save" "No windows on workspace $ws"
-  echo "No windows on workspace $ws" >&2
+  notify "$(msg "Nothing to save")" "$(msg "No windows on workspace %1" "$ws")"
+  msg "No windows on workspace %1" "$ws" >&2
   exit 1
 fi
 
@@ -226,4 +230,4 @@ mv "$tmp" "$out"
 
 printf '%s\n' "${lines[@]}"
 echo "Saved: $out"
-((QUIET)) || notify "Saved $n windows from workspace $ws" "$(printf '%s\n' "${lines[@]}" | awk '{print $3}' | paste -sd ', ')"
+((QUIET)) || notify "$(msg "Saved %1 windows from workspace %2" "$n" "$ws")" "$(printf '%s\n' "${lines[@]}" | awk '{print $3}' | paste -sd ', ')"

@@ -1,0 +1,21 @@
+{
+  "Nothing to save": "Nada para guardar",
+  "No windows on workspace %1": "No hay ventanas en el escritorio %1",
+  "Saved %1 windows from workspace %2": "Se guardaron %1 ventanas del escritorio %2",
+  "Could not switch to workspace %1": "No se pudo pasar al escritorio %1",
+  "Nothing saved for workspace %1": "No hay nada guardado para el escritorio %1",
+  "Run 'Save them all' first": "Primero usá 'Guardar todas'",
+  "No such file: %1": "No existe el archivo: %1",
+  "Cannot restore workspace %1": "No se puede restaurar el escritorio %1",
+  "(no launcher)": "(sin forma de abrirla)",
+  "(not installed)": "(no instalada)",
+  "(closed itself)": "(se cerró sola)",
+  "%1 opened, %2 already there": "%1 abiertas, %2 ya estaban",
+  "Windows: %1 missing": "Ventanas: faltan %1",
+  "%1; missing: %2": "%1; faltan: %2",
+  "Windows restored on workspace %1": "Ventanas restauradas en el escritorio %1",
+  "Restored at login, with gaps": "Restaurado al iniciar, con faltantes",
+  "Check workspace %1": "Revisá el escritorio %1",
+  "Windows restored at login": "Ventanas restauradas al iniciar",
+  "Workspace %1": "Escritorio %1"
+}

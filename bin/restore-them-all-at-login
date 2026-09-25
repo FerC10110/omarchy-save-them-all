@@ -10,9 +10,12 @@
 
 set -euo pipefail
 
+BIN_DIR=$(dirname "$(readlink -f "$0")")
+# shellcheck source=lib/i18n.sh
+source "$BIN_DIR/lib/i18n.sh"
+
 STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
 DELAY="${SAVE_THEM_ALL_LOGIN_DELAY:-3}"
-BIN_DIR=$(dirname "$(readlink -f "$0")")
 
 usage() {
   cat <<USAGE
@@ -55,7 +58,7 @@ list() {
 set_autostart() { # $1 workspace, $2 true|false
   [[ $1 =~ ^[0-9]+$ ]] || { echo "restore-them-all-at-login: workspace must be a number" >&2; exit 1; }
   local file="$STATE_DIR/workspace-$1.json" tmp
-  [[ -f $file ]] || { echo "Nothing saved for workspace $1" >&2; exit 1; }
+  [[ -f $file ]] || { msg "Nothing saved for workspace %1" "$1" >&2; exit 1; }
   tmp=$(mktemp "$STATE_DIR/.autostart.XXXXXX")
   jq --argjson on "$2" '.autostart = $on' "$file" >"$tmp"
   mv "$tmp" "$file"
@@ -106,7 +109,7 @@ done
 hyprctl dispatch "hl.dsp.focus({ workspace = '$start_ws' })" >/dev/null
 
 if ((${#failed[@]})); then
-  notify "Restored at login, with gaps" "Check workspace $(printf '%s, ' "${failed[@]}" | sed 's/, $//')"
+  notify "$(msg "Restored at login, with gaps")" "$(msg "Check workspace %1" "$(printf '%s, ' "${failed[@]}" | sed 's/, $//')")"
   exit 1
 fi
-notify "Windows restored at login" "Workspace $(printf '%s, ' "${restored[@]}" | sed 's/, $//')"
+notify "$(msg "Windows restored at login")" "$(msg "Workspace %1" "$(printf '%s, ' "${restored[@]}" | sed 's/, $//')")"
