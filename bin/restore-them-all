@@ -15,6 +15,7 @@ STATE_DIR="${SAVE_THEM_ALL_STATE:-$HOME/.local/state/save-them-all}"
 TIMEOUT="${SAVE_THEM_ALL_TIMEOUT:-25}"
 PARKING="special:savethemall"   # hidden workspace where windows wait while the tree is rebuilt
 QUIET=0
+LOG="$STATE_DIR/restore.log"   # what went wrong with cards, beyond the notification
 
 usage() {
   cat <<USAGE
@@ -382,23 +383,76 @@ for i in "${!entries[@]}"; do
   fi
 done
 
+# Where each saved window stands now, by its index in the file: the address,
+# or null when it could not be opened. This is what bin/cards takes.
+addr_json() {
+  local i out=()
+  ((${#entries[@]})) || { echo '[]'; return; }
+  for i in "${!entries[@]}"; do out+=("${addrs[$i]:-null}"); done
+  printf '%s\n' "${out[@]}" | jq -Rsc 'split("\n")[:-1] | map(if . == "null" then null else . end)'
+}
+addresses=$(addr_json)
+
+# Cards: in the tree each card takes one place, the one of its slot; its
+# other windows wait outside until the card is built (bin/cards layout).
+has_cards=$(jq -r 'if (.cards | type) == "array" and (.cards | length) > 0 then "yes" else "no" end' "$file" 2>/dev/null || echo no)
+declare -A hidden=() slot=()
+if [[ $has_cards == yes ]] && card_layout=$("$BIN_DIR/cards" layout --file "$file" --addresses "$addresses" 2>>"$LOG"); then
+  while read -r i; do [[ -n $i ]] && hidden[$i]=1; done < <(jq -r '.hide[]' <<<"$card_layout")
+  while IFS=$'\t' read -r i x y w h; do [[ -n $i ]] && slot[$i]="$x $y $w $h"; done \
+    < <(jq -r '.slots[] | [.i, .at[0], .at[1], .size[0], .size[1]] | @tsv' <<<"$card_layout")
+fi
+hidden_addrs=$(for i in "${!hidden[@]}"; do echo "${addrs[$i]:-}"; done)
+
+# A window already in a card or a group is left exactly where it is.
+grouped_now=$(hyprctl -j clients | jq -r '.[] | select((.grouped // []) | length > 0) | .address')
+is_grouped() { grep -qx -- "$1" <<<"$grouped_now"; }
+
+# The window a slot's card shows now: once the card is built the slot may be
+# on its hidden side, and only the shown window can be resized.
+shown_of() { # $1 address
+  hyprctl -j clients | jq -r --arg a "$1" '
+    (map(select(.address == $a)) | first | .grouped // []) as $g
+    | if ($g | length) == 0 then $a
+      else ([.[] | select((.address as $x | $g | index($x)) != null and ((.hidden // false) | not)) | .address] | first // $a)
+      end'
+}
+
+rect_of() { # $1 index -> "x y w h": its card's place for a slot, its own otherwise
+  if [[ -n ${slot[$1]:-} ]]; then
+    echo "${slot[$1]}"
+  else
+    jq -r '"\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' <<<"${entries[$1]}"
+  fi
+}
+
 # ---------- 2. Rebuild the dwindle tree ----------
 tiled='[]'
 for i in "${!entries[@]}"; do
   [[ -n ${addrs[$i]:-} ]] || continue
+  [[ -n ${hidden[$i]:-} ]] && continue
+  is_grouped "${addrs[$i]}" && continue
   [[ $(jq -r .floating <<<"${entries[$i]}") == true ]] && continue
-  tiled=$(jq -c --argjson i "$i" --argjson e "${entries[$i]}" \
-    '. + [{i: $i, x: $e.at[0], y: $e.at[1], w: $e.size[0], h: $e.size[1]}]' <<<"$tiled")
+  read -r x y w h < <(rect_of "$i")
+  tiled=$(jq -c --argjson i "$i" --argjson x "$x" --argjson y "$y" --argjson w "$w" --argjson h "$h" \
+    '. + [{i: $i, x: $x, y: $y, w: $w, h: $h}]' <<<"$tiled")
 done
 
 if (( $(jq length <<<"$tiled") > 1 )); then
   plan=$(build_plan "$tiled")
   managed=$(printf '%s\n' "${addrs[@]}")
   extras=()
-  # Park every tiled window on the workspace, including the ones that were not saved.
+  later=()
+  # Park every tiled window on the workspace, including the ones that were not
+  # saved; never one that is already in a card or group.
   while IFS=$'\t' read -r a fl; do
     [[ $fl == true ]] && continue
-    grep -qx "$a" <<<"$managed" || extras+=("$a")
+    is_grouped "$a" && continue
+    if grep -qx -- "$a" <<<"$hidden_addrs"; then
+      later+=("$a")
+    elif ! grep -qx -- "$a" <<<"$managed"; then
+      extras+=("$a")
+    fi
     park "$a"
   done < <(clients_on_ws | jq -r '.[] | [.address, (.floating|tostring)] | @tsv')
   sleep 0.3
@@ -412,21 +466,41 @@ if (( $(jq length <<<"$tiled") > 1 )); then
     fi
     last=${addrs[$i]}
   done < <(jq -c '.[]' <<<"$plan")
-  for a in "${extras[@]}"; do   # unsaved windows come back last, to the right of the last one
+  # Unsaved windows come back last, to the right of the last one; then the
+  # windows that wait for their card, so a card that cannot be built hides nothing.
+  for a in "${extras[@]}" "${later[@]}"; do
     unpark "$a" "$last" r
     last=$a
   done
 fi
 
-# ---------- 3. Geometry ----------
+# ---------- 3. Cards ----------
+card_notes=()
+if [[ $has_cards == yes ]]; then
+  sub=fallback
+  if "$BIN_DIR/cards" status 2>>"$LOG" | jq -e '.available == true' >/dev/null; then sub=rebuild; fi
+  if out=$("$BIN_DIR/cards" "$sub" --file "$file" --addresses "$addresses" 2>>"$LOG"); then
+    mapfile -t card_notes < <(jq -r '.notes[]' <<<"$out")
+    echo "cards: $(jq -r '"\(.built) built, \(.kept) already there"' <<<"$out")"
+  else
+    card_notes+=("$(msg "Cards were not rebuilt: see %1" "$LOG")")
+  fi
+fi
+
+# ---------- 4. Geometry ----------
 for i in "${!entries[@]}"; do
   [[ -n ${addrs[$i]:-} ]] || continue
-  read -r fl w h x y < <(jq -r '"\(.floating) \(.size[0]) \(.size[1]) \(.at[0]) \(.at[1])"' <<<"${entries[$i]}")
-  if [[ $fl == true ]]; then
-    place_floating "${addrs[$i]}" "$w" "$h" "$x" "$y"
+  [[ -n ${hidden[$i]:-} ]] && continue      # a card's other windows follow their card
+  is_grouped "${addrs[$i]}" && continue     # it was in a card or group before: untouched
+  read -r fl < <(jq -r '.floating' <<<"${entries[$i]}")
+  read -r x y w h < <(rect_of "$i")
+  target=${addrs[$i]}
+  [[ -n ${slot[$i]:-} ]] && target=$(shown_of "$target")
+  if [[ $fl == true && -z ${slot[$i]:-} ]]; then
+    place_floating "$target" "$w" "$h" "$x" "$y"
   else
-    fit "${addrs[$i]}" x "$w"
-    fit "${addrs[$i]}" y "$h"
+    fit "$target" x "$w"
+    fit "$target" y "$h"
   fi
 done
 
@@ -436,10 +510,18 @@ if [[ -n $active_before ]] && clients_on_ws | jq -e --arg a "$active_before" 'an
 fi
 
 summary=$(msg "%1 opened, %2 already there" "$opened" "$skipped")
+extra=""
+((${#card_notes[@]})) && extra=$(printf '\n%s' "${card_notes[@]}")
 if ((${#missing[@]})); then
-  notify "$(msg "Windows: %1 missing" "${#missing[@]}")" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')"
+  notify "$(msg "Windows: %1 missing" "${#missing[@]}")" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')$extra"
   msg "%1; missing: %2" "$summary" "${missing[*]}" >&2
   exit 1
 fi
 echo "$summary"
-((QUIET)) || notify "$(msg "Windows restored on workspace %1" "$ws")" "$summary"
+if ((${#card_notes[@]})); then
+  # Card notes are news even when the caller asked for quiet.
+  notify "$(msg "Windows restored on workspace %1, cards with notes" "$ws")" "$summary$extra"
+  printf '%s\n' "${card_notes[@]}" >&2
+else
+  ((QUIET)) || notify "$(msg "Windows restored on workspace %1" "$ws")" "$summary"
+fi

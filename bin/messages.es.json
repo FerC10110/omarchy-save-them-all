@@ -58,5 +58,7 @@
   "Cards were grouped as tabs instead: %1": "Las tarjetas se agruparon como pestañas: %1",
   "Card %1 could not be rebuilt: %2": "La tarjeta %1 no se pudo rearmar: %2",
   "Card %1 was grouped as tabs instead: it has more windows on a side than the helper supports": "La tarjeta %1 se agrupó como pestañas: tiene más ventanas de un lado de las que soporta el asistente",
-  "Card %1 was rebuilt, but its name could not be saved: %2": "La tarjeta %1 se rearmó, pero no se pudo guardar su nombre: %2"
+  "Card %1 was rebuilt, but its name could not be saved: %2": "La tarjeta %1 se rearmó, pero no se pudo guardar su nombre: %2",
+  "Cards were not rebuilt: see %1": "No se rearmaron las tarjetas: mirá %1",
+  "Windows restored on workspace %1, cards with notes": "Ventanas restauradas en el escritorio %1, tarjetas con avisos"
 }
