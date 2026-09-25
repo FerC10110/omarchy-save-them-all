@@ -34,6 +34,17 @@ function faceOfPick(draft, address) {
   return Builder.faceOf(draft, address)
 }
 
+// pin: { name, x, y, workspace } recorded by the overlay's open(), once.
+// True once the pinned monitor no longer shows the workspace it showed
+// then — a workspace-switch keybind fired while the overlay held the
+// exclusive keyboard grab (Hyprland still runs those) — so the caller
+// knows to cancel the pick instead of showing (and letting a click add
+// from) another workspace's windows. activeWorkspace < 0 means no reading
+// of the pinned monitor yet: never a change.
+function pinChanged(pin, activeWorkspace) {
+  return !!pin && activeWorkspace >= 0 && activeWorkspace !== pin.workspace
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { rects: rects, hit: hit, toggle: toggle, faceOfPick: faceOfPick }
+  module.exports = { rects: rects, hit: hit, toggle: toggle, faceOfPick: faceOfPick, pinChanged: pinChanged }
 }

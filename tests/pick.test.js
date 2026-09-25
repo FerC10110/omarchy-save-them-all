@@ -33,3 +33,12 @@ test("toggle adds to the active side and takes a picked window out", () => {
   assert.deepEqual(r.draft.faces, [[], []])
   assert.equal(Pick.faceOfPick(r.draft, "0x1"), -1)
 })
+
+test("pinChanged: true once the pinned monitor's workspace has moved on", () => {
+  const pin = { name: "DP-1", x: 0, y: 0, workspace: 3 }
+  assert.equal(Pick.pinChanged(pin, 3), false)
+  assert.equal(Pick.pinChanged(pin, 5), true)
+  // -1: no reading of the pinned monitor yet, never a change.
+  assert.equal(Pick.pinChanged(pin, -1), false)
+  assert.equal(Pick.pinChanged(null, 5), false)
+})

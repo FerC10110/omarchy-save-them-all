@@ -12,10 +12,14 @@ Item {
   required property var host
   property var origin: ({ x: 0, y: 0 })
   readonly property var service: host.service
+  // The workspace to draw: the overlay pins this to what open() recorded,
+  // so a live workspace switch elsewhere does not swap the windows shown
+  // mid-pick. Standalone (tests), it follows the service like before.
+  property int workspace: service.focusedWorkspace
   readonly property var draft: service.pickDraft
   readonly property int face: service.pickFace
   readonly property var ctx: Builder.context(service.flip.snapshot.cards, draft, service.flip.snapshot.capabilities)
-  readonly property var rects: Pick.rects(service.clients, service.focusedWorkspace, origin)
+  readonly property var rects: Pick.rects(service.clients, workspace, origin)
   readonly property int count: draft ? draft.faces[0].length + draft.faces[1].length : 0
   property string hovered: ""
   focus: true
@@ -53,7 +57,7 @@ Item {
       height: modelData.h
       color: picked >= 0 ? Qt.rgba(view.host.accent.r, view.host.accent.g, view.host.accent.b, 0.28)
         : (under && why === "" ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
-      border.width: under || picked >= 0 ? 3 : 1
+      border.width: (under && why === "") || picked >= 0 ? 3 : 1
       border.color: why !== "" ? Qt.rgba(1, 1, 1, 0.25) : view.host.accent
 
       Column {
@@ -108,6 +112,11 @@ Item {
     color: Color.popups.background
     border.width: 1
     border.color: view.host.accent
+
+    // Otherwise a click here falls through to the fullscreen MouseArea
+    // behind it and toggles whatever window rect happens to sit under
+    // the bar.
+    MouseArea { anchors.fill: parent }
 
     Column {
       id: bar

@@ -52,6 +52,7 @@ Scope {
   property string pendingName: ""
   property var pickDraft: null      // the overlay's copy of the draft
   property int pickFace: 0
+  property string pickNotice: ""    // builderNotice from before the pick, restored on Esc
   readonly property bool picking: pickDraft !== null
 
   function pluginPath(relative) {
@@ -175,10 +176,18 @@ Scope {
     if (!draft || !shell) return
     pickDraft = draft
     pickFace = 0
+    pickNotice = builderNotice
     builderNotice = ""
     refreshClients()
     if (panel) panel.dismiss()
-    shell.summon(pluginId, "{}")
+    if (!shell.summon(pluginId, "{}")) {
+      // No overlay came up (the summon itself was refused): the panel is
+      // already dismissed, so bring it back and say why instead of leaving
+      // the builder gone with nothing on screen.
+      pickDraft = null
+      builderNotice = t("Could not open pick on screen.")
+      if (panel) panel.reveal()
+    }
   }
 
   function pickToggle(address) {
@@ -190,10 +199,15 @@ Scope {
 
   function finishPick(apply) {
     if (!pickDraft) return
-    // Prune against the live client list, not whatever pruneDraft() last
-    // caught: a window can close between its last run and Enter, and
-    // applying a stale pickDraft would resurrect it in the card.
-    if (apply) draft = Builder.prune(pickDraft, clients).draft
+    if (apply) {
+      // Prune against the live client list, not whatever pruneDraft() last
+      // caught: a window can close between its last run and Enter, and
+      // applying a stale pickDraft would resurrect it in the card.
+      draft = Builder.prune(pickDraft, clients).draft
+      builderNotice = ""
+    } else {
+      builderNotice = pickNotice
+    }
     pickDraft = null
     if (shell) shell.hide(pluginId)
     if (panel) panel.reveal()

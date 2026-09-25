@@ -78,6 +78,7 @@ var STRINGS = {
     "These windows will move to workspace %1: %2": "Estas ventanas van a pasar al escritorio %1: %2",
     "Drag a window onto a side, or pick it with j/k and press f (Front) or r (Back). x takes it out; e picks on screen.": "Arrastrá una ventana a una cara, o elegila con j/k y apretá f (Frente) o r (Reverso). x la saca; e elige en pantalla.",
     "Pick on screen": "Elegir en pantalla",
+    "Could not open pick on screen.": "No se pudo abrir Elegir en pantalla.",
     "Adding to: %1": "Sumando a: %1",
     "%1 picked": "%1 elegidas",
     "Click a window to add or take it out · Tab switches side · Enter goes back with them · Esc goes back without changes": "Clic en una ventana para sumarla o sacarla · Tab cambia de cara · Enter vuelve con lo elegido · Esc vuelve sin cambios",
