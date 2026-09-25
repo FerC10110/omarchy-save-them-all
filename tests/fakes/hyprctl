@@ -16,6 +16,9 @@ if not path:
 with open(path) as f:
     state = json.load(f)
 clients = {c['address']: c for c in state.setdefault('clients', [])}
+if state.get('down'):
+    print('HYPRLAND_INSTANCE_SIGNATURE was set, but no socket found', file=sys.stderr)
+    sys.exit(1)
 ADDR = r"address:(0x[0-9a-f]+)"
 
 

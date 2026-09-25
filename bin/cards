@@ -1,0 +1,558 @@
+#!/usr/bin/env python3
+"""cards: Save Them All's side of Hyprflip cards.
+
+    cards status                                 can Hyprflip be used; if not, why and how to fix it
+    cards members  --workspace N [--previous F]  hidden windows of the workspace's cards, to save too
+    cards capture  --workspace N --addresses A   the workspace's cards, as indices into the saved windows
+    cards name     --id N --name TEXT            remember a card's name for this Hyprland session
+
+Every command prints one JSON value. A (--addresses) is a JSON list aligned
+with the windows of a workspace file: each window's address, or null when it
+is not open. A state file is data: nothing read from it is ever run.
+"""
+import argparse
+from datetime import datetime, timezone
+from functools import lru_cache
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+HOME = Path(os.environ.get('HOME') or Path.home())
+STATE_DIR = Path(os.environ.get('SAVE_THEM_ALL_STATE') or HOME / '.local/state/save-them-all')
+HELPER = Path(os.environ.get('SAVE_THEM_ALL_HYPRFLIP_HELPER') or HOME / '.local/lib/hyprflip/control.py')
+SOURCE = Path(os.environ.get('SAVE_THEM_ALL_HYPRFLIP_SRC') or HOME / '.local/src/hyprflip-omacards')
+MESSAGES = Path(__file__).resolve().parent / 'messages.es.json'
+ADDRESS = re.compile(r'^0x[0-9a-f]{1,16}$')
+AXES = {'horizontal': 'row', 'vertical': 'column'}
+MAX_PANES = 5
+COMMANDS = {}
+
+
+class CardsError(RuntimeError):
+    """Something to tell the user; the message is already in their language."""
+
+
+class HyprError(CardsError):
+    """hyprctl failed or answered something unreadable."""
+
+
+def command(name):
+    def register(fn):
+        COMMANDS[name] = fn
+        return fn
+    return register
+
+
+# -- language --------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def language():
+    """SAVE_THEM_ALL_LANG, else settings.json, else the system: as bin/lib/i18n.sh."""
+    chosen = os.environ.get('SAVE_THEM_ALL_LANG', '')
+    if chosen in ('en', 'es'):
+        return chosen
+    try:
+        chosen = json.loads((STATE_DIR / 'settings.json').read_text()).get('language')
+    except (OSError, ValueError, AttributeError):
+        chosen = None
+    if chosen in ('en', 'es'):
+        return chosen
+    system = os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES') or os.environ.get('LANG') or ''
+    return 'es' if system.startswith('es') else 'en'
+
+
+@lru_cache(maxsize=1)
+def spanish():
+    try:
+        return json.loads(MESSAGES.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def msg(text, *args):
+    """The English text in the user's language, with %1, %2… filled in one pass."""
+    if language() == 'es':
+        text = spanish().get(text, text)
+
+    def fill(m):
+        n = int(m[1])
+        return str(args[n - 1]) if 0 < n <= len(args) else m[0]
+    return re.sub(r'%(\d+)', fill, text)
+
+
+def log(line):
+    stamp = datetime.now(timezone.utc).astimezone().isoformat(timespec='seconds')
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(STATE_DIR / 'restore.log', 'a') as f:
+            f.write(f'{stamp} {line}\n')
+    except OSError:
+        pass
+
+
+def note(text):
+    """A note for the final notification, also kept in restore.log."""
+    log(text)
+    return text
+
+
+# -- Hyprland and Hyprflip ---------------------------------------------------
+
+def hyprctl(*args):
+    """hyprctl's answer as text, or HyprError."""
+    try:
+        done = subprocess.run(['hyprctl', *args], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise HyprError(str(error)) from error
+    reply = done.stdout.strip()
+    if done.returncode or reply.startswith('error') or 'Lua error' in reply:
+        raise HyprError(reply or done.stderr.strip() or 'hyprctl ' + ' '.join(args))
+    return reply
+
+
+def hypr_json(*args):
+    reply = hyprctl(*args)
+    try:
+        return json.loads(reply)
+    except ValueError as error:
+        raise HyprError(reply[:200]) from error
+
+
+def clients():
+    return {c['address']: c for c in hypr_json('-j', 'clients') if isinstance(c, dict) and 'address' in c}
+
+
+def active_workspace():
+    return hypr_json('-j', 'activeworkspace')['id']
+
+
+def dispatch(expression):
+    hyprctl('dispatch', expression)
+
+
+def focus(address):
+    return f"hl.dsp.focus({{ window = 'address:{address}' }})"
+
+
+def move_to(address, workspace):
+    return f"hl.dsp.window.move({{ window = 'address:{address}', workspace = '{workspace}', follow = false }})"
+
+
+def plugin_names():
+    try:
+        plugins = json.loads(hyprctl('-j', 'plugin', 'list'))
+    except (HyprError, ValueError):
+        return []   # hyprctl says "no plugins loaded" in plain text
+    return [p.get('name') for p in plugins if isinstance(p, dict)] if isinstance(plugins, list) else []
+
+
+def flip_status():
+    """`hyprctl hyprflip status`, or None when Hyprflip is not loaded."""
+    if 'hyprflip' not in plugin_names():
+        return None
+    state = hypr_json('hyprflip', 'status')
+    return state if isinstance(state, dict) else None
+
+
+def helper_snapshot():
+    try:
+        done = subprocess.run(['python3', str(HELPER), 'snapshot'], capture_output=True, text=True, timeout=15)
+        value = json.loads(done.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+        raise CardsError(msg('The Hyprflip helper did not answer: %1', error)) from error
+    if not isinstance(value, dict):
+        raise CardsError(msg('The Hyprflip helper did not answer: %1', done.stdout[:200]))
+    return value
+
+
+def built_for():
+    try:
+        text = (SOURCE / 'build' / 'CMakeCache.txt').read_text(errors='replace')
+    except OSError:
+        return ''
+    m = re.search(r'^HYPRLAND_VERSION:[A-Z]+=(.+)$', text, re.M)
+    return m[1].strip() if m else ''
+
+
+@command('status')
+def status(args):
+    report = {'available': False, 'reason': '', 'hyprland': '', 'built_for': built_for(),
+              'hyprflip': '', 'create_faces': False, 'detail': '', 'fix': ''}
+    rebuild = f'cd {SOURCE} && make && python3 scripts/install.py'
+    try:
+        report['hyprland'] = str(hypr_json('-j', 'version').get('version', ''))
+    except HyprError as error:
+        report.update(reason='no-hyprland', detail=str(error))
+        return report
+    loaded = 'hyprflip' in plugin_names()
+    if not loaded:
+        try:
+            errors = hyprctl('configerrors')
+        except HyprError:
+            errors = ''
+        mismatch = report['built_for'] and report['built_for'] != report['hyprland']
+        report.update(reason='mismatch' if mismatch else 'no-plugin', detail=errors.strip()[:300], fix=rebuild)
+        return report
+    try:
+        report['hyprflip'] = str((flip_status() or {}).get('version', ''))
+    except HyprError as error:
+        report.update(reason='no-plugin', detail=str(error), fix=rebuild)
+        return report
+    if not HELPER.is_file():
+        report.update(reason='no-helper', fix=f'python3 {SOURCE}/scripts/install-setup.py --backend-only')
+        return report
+    try:
+        snapshot = helper_snapshot()
+    except CardsError as error:
+        report.update(reason='protocol', detail=str(error), fix=f'python3 {SOURCE}/scripts/install-setup.py --backend-only')
+        return report
+    if snapshot.get('protocol') != 1:
+        report.update(reason='protocol', fix=f'python3 {SOURCE}/scripts/install-setup.py --backend-only')
+        return report
+    if not snapshot.get('available'):
+        report.update(reason='helper', detail=str(snapshot.get('error') or ''))
+        return report
+    report.update(available=True, reason='ok',
+                  create_faces=bool((snapshot.get('capabilities') or {}).get('create_faces')))
+    return report
+
+
+# -- names -------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def desktop_entries():
+    dirs = [os.environ.get('XDG_DATA_HOME') or str(HOME / '.local/share')]
+    dirs += (os.environ.get('XDG_DATA_DIRS') or '/usr/local/share:/usr/share').split(':')
+    seen, entries = set(), []
+    for d in dirs:
+        if not d:
+            continue
+        folder = Path(d) / 'applications'
+        try:
+            listing = sorted(os.listdir(folder))
+        except OSError:
+            continue
+        for name in listing:
+            if not name.endswith('.desktop') or name in seen:
+                continue
+            seen.add(name)
+            fields, section = {}, None
+            try:
+                for line in (folder / name).read_text(errors='replace').splitlines():
+                    line = line.strip()
+                    if line.startswith('['):
+                        section = line
+                    elif section == '[Desktop Entry]' and '=' in line:
+                        key, value = line.split('=', 1)
+                        fields.setdefault(key.strip(), value.strip())
+            except OSError:
+                continue
+            entries.append({'id': name, 'name': fields.get('Name', ''),
+                            'startupClass': fields.get('StartupWMClass', ''), 'exec': fields.get('Exec', '')})
+    return entries
+
+
+def url_class(url):
+    u = re.sub(r'^[^:/]*://', '', str(url))
+    u = u.split('?')[0].split('#')[0]
+    host, _, path = u.partition('/')
+    return f'chrome-{host}__{path.replace("/", "_")}-Default'
+
+
+def webapp_url(exec_line):
+    m = re.match(r'^omarchy-launch-webapp\s+"?([^"\s]+)"?', exec_line or '')
+    return m[1].replace('%%', '%') if m else ''
+
+
+def app_name(cls, launch=None):
+    """A window's readable name: the same answer as AppNames.resolve in the panel."""
+    cls = str(cls or '')
+    entries = desktop_entries()
+    web = cls
+    if isinstance(launch, dict) and launch.get('kind') == 'webapp' and launch.get('url'):
+        web = url_class(launch['url'])
+    if re.match(r'^chrome-.+-Default$', web):
+        for e in entries:
+            url = webapp_url(e['exec'])
+            if url and url_class(url) == web:
+                return e['name']
+    lower = cls.lower()
+    if lower:
+        for e in entries:
+            if e['startupClass'].lower() == lower:
+                return e['name']
+        for e in entries:
+            if e['id'].removesuffix('.desktop').lower() == lower:
+                return e['name']
+    host = re.match(r'^chrome-([^_]+)__.*-Default$', web)
+    if host:
+        return host[1]
+    parts = cls.split('.')
+    if len(parts) >= 3 and parts[-1]:
+        return parts[-1]
+    return cls
+
+
+def clean_name(text):
+    return re.sub(r'[\x00-\x1f\x7f]', '', str(text)).strip()[:60]
+
+
+def names_path():
+    runtime = os.environ.get('SAVE_THEM_ALL_RUNTIME') or (
+        os.environ['XDG_RUNTIME_DIR'] + '/save-them-all' if os.environ.get('XDG_RUNTIME_DIR') else '')
+    instance = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', '')
+    if not runtime or not instance or '/' in instance:
+        return None
+    return Path(runtime) / f'cards-{instance}.json'
+
+
+def read_names():
+    """Card names of this Hyprland session, by Hyprflip container id."""
+    path = names_path()
+    try:
+        data = json.loads(path.read_text()) if path else {}
+    except (OSError, ValueError):
+        return {}
+    return {str(k): clean_name(v) for k, v in data.items() if isinstance(v, str)} if isinstance(data, dict) else {}
+
+
+def write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix='.cards.')
+    with os.fdopen(fd, 'w') as f:
+        json.dump(value, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    os.replace(tmp, path)
+
+
+def set_name(cid, name):
+    path = names_path()
+    if path is None:
+        return
+    names = read_names()
+    name = clean_name(name)
+    if name:
+        names[str(cid)] = name
+    else:
+        names.pop(str(cid), None)
+    write_json(path, names)
+
+
+@command('name')
+def name(args):
+    if not re.fullmatch(r'\d{1,9}', args.id or ''):
+        raise CardsError(msg('--id must be a card number'))
+    set_name(int(args.id), args.name or '')
+    return {'ok': True}
+
+
+# -- workspace files -----------------------------------------------------------
+
+def whole(v):
+    return type(v) is int and -1_000_000 < v < 1_000_000
+
+
+def ratios(values, n):
+    if (not isinstance(values, list) or len(values) != n
+            or any(type(r) not in (int, float) or r <= 0 for r in values)):
+        values = [1] * n
+    total = sum(values)
+    return [round(r / total, 4) for r in values]
+
+
+def card_problem(card, count):
+    """Why a card read from a state file cannot be used, or ''."""
+    if not isinstance(card, dict):
+        return msg('is not an object')
+    faces = card.get('faces')
+    if not isinstance(faces, list) or len(faces) != 2 or not all(isinstance(f, dict) for f in faces):
+        return msg('needs exactly two sides')
+    seen = []
+    for face in faces:
+        windows = face.get('windows')
+        if (not isinstance(windows, list) or not 1 <= len(windows) <= MAX_PANES
+                or any(type(i) is not int or not 0 <= i < count for i in windows)):
+            return msg('needs 1 to 5 window numbers on each side')
+        seen += windows
+        if face.get('axis', 'row') not in ('row', 'column'):
+            return msg('axis must be row or column')
+        values = face.get('ratios')
+        if values is not None and (not isinstance(values, list) or len(values) != len(windows)
+                                   or any(type(r) not in (int, float) or not 0 < r <= 1 for r in values)):
+            return msg('ratios must be one number between 0 and 1 per window')
+    if len(set(seen)) != len(seen):
+        return msg('repeats a window')
+    visible = card.get('visible', 0)
+    if type(visible) is not int or visible not in (0, 1):
+        return msg('visible must be 0 or 1')
+    floating = card.get('floating')
+    if floating is not None:
+        def pair(v):
+            return isinstance(v, list) and len(v) == 2 and all(whole(n) for n in v)
+        if (not isinstance(floating, dict) or not pair(floating.get('at')) or not pair(floating.get('size'))
+                or min(floating['size']) < 1):
+            return msg('floating must be null or {at, size} with whole numbers')
+    if not isinstance(card.get('name', ''), str):
+        return msg('name must be text')
+    return ''
+
+
+def read_file(path):
+    """(windows, cards, problem) of a workspace file. Anything wrong in the
+    cards block drops the whole block, never the windows."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as error:
+        return [], [], str(error)
+    windows = data.get('windows') if isinstance(data, dict) else None
+    if not isinstance(windows, list):
+        return [], [], msg('it has no windows list')
+    raw = data.get('cards')
+    if raw is None:
+        return windows, [], ''
+    if not isinstance(raw, list):
+        return windows, [], msg('cards must be a list')
+    cards = []
+    for n, card in enumerate(raw, 1):
+        problem = card_problem(card, len(windows))
+        if problem:
+            return windows, [], msg('card %1 %2', n, problem)
+        cards.append({'name': clean_name(card.get('name', '')),
+                      'faces': [{'windows': list(f['windows']), 'axis': f.get('axis', 'row'),
+                                 'ratios': ratios(f.get('ratios'), len(f['windows']))} for f in card['faces']],
+                      'visible': card.get('visible', 0), 'floating': card.get('floating')})
+    seen = [i for c in cards for f in c['faces'] for i in f['windows']]
+    if len(set(seen)) != len(seen):
+        return windows, [], msg('a window is in two cards')
+    return windows, cards, ''
+
+
+def present(card, addresses):
+    """The card's sides as the addresses of its windows that are open."""
+    return [[addresses[i] for i in f['windows'] if i < len(addresses) and addresses[i]] for f in card['faces']]
+
+
+def saved_title(card, windows):
+    if card['name']:
+        return card['name']
+
+    def label(i):
+        w = windows[i] if 0 <= i < len(windows) and isinstance(windows[i], dict) else {}
+        return app_name(w.get('class'), w.get('launch'))
+    return ' ↔ '.join(' + '.join(label(i) for i in f['windows']) for f in card['faces'])
+
+
+def live_title(card, now, names):
+    return names.get(str(card.get('id'))) or ' ↔ '.join(
+        ' + '.join(app_name(now.get(a, {}).get('class')) for a in f) for f in card.get('faces', []))
+
+
+def workspace_arg(args):
+    if not re.fullmatch(r'\d{1,6}', args.workspace or '') or int(args.workspace) < 1:
+        raise CardsError(msg('--workspace must be a workspace number'))
+    return int(args.workspace)
+
+
+def addresses_arg(args):
+    try:
+        value = json.loads(args.addresses or '')
+    except ValueError:
+        value = None
+    if not isinstance(value, list) or any(
+            a is not None and (not isinstance(a, str) or not ADDRESS.match(a)) for a in value):
+        raise CardsError(msg('--addresses must be a JSON list of window addresses or null'))
+    return value
+
+
+# -- saving --------------------------------------------------------------------
+
+def card_classes(path):
+    """Classes of the windows of the cards saved in a file."""
+    windows, cards, problem = read_file(path)
+    if problem:
+        return set()
+    return {windows[i].get('class') for c in cards for f in c['faces'] for i in f['windows']
+            if isinstance(windows[i], dict)}
+
+
+@command('members')
+def members(args):
+    ws = workspace_arg(args)
+    now = clients()
+    try:
+        state = flip_status()
+    except HyprError:
+        state = None
+    if state:
+        found = [a for card in state.get('containers', [])
+                 if now.get(card.get('current'), {}).get('workspace', {}).get('id') == ws
+                 for face in card.get('faces', []) for a in face if a in now]
+    elif args.previous:
+        classes = card_classes(Path(args.previous))
+        found = [a for a, c in now.items() if c.get('workspace', {}).get('id') == ws
+                 and c.get('hidden') and c.get('grouped') and c.get('class') in classes]
+    else:
+        found = []
+    return sorted(set(found))
+
+
+@command('capture')
+def capture(args):
+    ws = workspace_arg(args)
+    index = {a: i for i, a in enumerate(addresses_arg(args)) if a}
+    now = clients()
+    state = flip_status() or {}
+    names = read_names()
+    cards, notes = [], []
+    for card in state.get('containers', []):
+        if now.get(card.get('current'), {}).get('workspace', {}).get('id') != ws:
+            continue
+        title = live_title(card, now, names)
+        layouts = card.get('layouts') or []
+        faces = []
+        for n, face in enumerate(card.get('faces', [])[:2]):
+            layout = layouts[n] if n < len(layouts) and isinstance(layouts[n], dict) else {}
+            weights = ratios(layout.get('ratios'), len(face))
+            kept = [(index[a], r) for a, r in zip(face, weights) if a in index]
+            for a in face:
+                if a not in index:
+                    notes.append(msg('%1 left card %2: it is not among the saved windows',
+                                     app_name(now.get(a, {}).get('class')), title))
+            faces.append({'windows': [i for i, _ in kept], 'axis': AXES.get(layout.get('axis'), 'row'),
+                          'ratios': ratios([r for _, r in kept], len(kept))})
+        if len(faces) != 2 or not all(f['windows'] for f in faces):
+            notes.append(msg('Card %1 was not saved: one of its sides has no saved window', title))
+            continue
+        floating = None
+        if card.get('floating'):
+            x, y, w, h = (int(round(v)) for v in (list(card.get('box') or []) + [0, 0, 0, 0])[:4])
+            floating = {'at': [x, y], 'size': [max(1, w), max(1, h)]}
+        cards.append({'name': names.get(str(card.get('id')), ''), 'faces': faces,
+                      'visible': 1 if card.get('active') == 1 else 0, 'floating': floating})
+    return {'cards': cards, 'notes': notes}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog='cards', description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('command', choices=sorted(COMMANDS))
+    for option in ('--workspace', '--previous', '--addresses', '--windows', '--file', '--id', '--name'):
+        parser.add_argument(option)
+    args = parser.parse_args(argv)
+    try:
+        result = COMMANDS[args.command](args)
+    except CardsError as error:
+        print(f'cards: {error}', file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -33,6 +33,22 @@ def saved_window(cls, at, size, launch, floating=False):
             'size': list(size), 'floating': floating}
 
 
+def container(cid, faces, current=None, active=0, floating=False, box=(960, 0, 960, 1080), layouts=None):
+    """One card of `hyprctl hyprflip status`."""
+    return {'id': cid, 'faces': faces, 'current': current or faces[active][0], 'active': active,
+            'unfolded': False, 'floating': floating, 'box': list(box), 'native_group': True,
+            'layouts': layouts or [{'axis': 'horizontal', 'focused': 0, 'ratios': [1 / len(f)] * len(f)}
+                                   for f in faces]}
+
+
+def flip(containers=()):
+    """`hyprctl hyprflip status` of Hyprflip 0.3.0."""
+    return {'version': '0.3.0', 'native_cards': True, 'container_provider': 'native',
+            'container_max_panes': 5, 'floating_cards': True, 'workspace_protection': True,
+            'transition': 'flip', 'transition_modes': ['flip', 'instant'], 'card_frame': False,
+            'card_gap': -1, 'pairs': [], 'containers': list(containers)}
+
+
 class ScriptTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix='save-them-all-test-'))
@@ -123,3 +139,12 @@ class ScriptTest(unittest.TestCase):
     def run_script(self, name, *args, env=None):
         return subprocess.run([str(BIN / name), *args], env={**self.env, **(env or {})},
                               capture_output=True, text=True, timeout=120)
+
+    def cards(self, *args, env=None):
+        return subprocess.run([str(BIN / 'cards'), *args], env={**self.env, **(env or {})},
+                              capture_output=True, text=True, timeout=60)
+
+    def cards_json(self, *args, env=None):
+        r = self.cards(*args, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout)
