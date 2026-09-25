@@ -34,6 +34,11 @@ var STEPS = [
   // premature "Cards need Hyprflip" — only "Checking Hyprflip…" (Fix round 1).
   { name: "cards-unsettled-es", page: "CardsTab.qml", lang: "es", patch: { settled: false, snapshot: {} } },
   { name: "cards-empty-en", page: "CardsTab.qml", lang: "en", patch: { emptyCards: true } },
+  { name: "settings-en", page: "SettingsTab.qml", lang: "en", patch: {} },
+  { name: "settings-es", page: "SettingsTab.qml", lang: "es", patch: {} },
+  { name: "settings-unavailable-es", page: "SettingsTab.qml", lang: "es",
+    patch: { status: { available: false, reason: "mismatch", hyprland: "0.57.0", built_for: "0.56.2", fix: "make" } } },
+  { name: "shortcuts-es", page: "ShortcutsPage.qml", lang: "es", patch: {} },
 ]
 
 if (typeof module !== "undefined") module.exports = { STEPS: STEPS }

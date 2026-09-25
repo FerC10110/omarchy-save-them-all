@@ -210,6 +210,4 @@ Column {
       }
     }
   }
-
-  BrowserQuitRow { width: parent.width; host: tab.host }
 }

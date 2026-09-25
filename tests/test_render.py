@@ -89,6 +89,12 @@ class RenderTest(unittest.TestCase):
             'cards-unavailable-es': ['Las tarjetas necesitan Hyprflip', 'El asistente de Hyprflip no está instalado'],
             'cards-unsettled-es': ['Revisando Hyprflip…'],
             'cards-empty-en': ['No cards yet. Press n to make one.'],
+            'settings-en': ['Language', 'Automatic', 'Classic tabs', 'Flip', 'Normal', 'Keyboard shortcuts',
+                            'Hyprflip 0.3.0 on Hyprland 0.56.2', 'Close the browser cleanly'],
+            'settings-es': ['Idioma', 'Automático', 'Pestañas clásicas', 'Voltear', 'Atajos de teclado',
+                            'Cerrar el navegador limpio'],
+            'settings-unavailable-es': ['Hyprflip no está disponible', 'Hyprflip no cargó', 'Idioma'],
+            'shortcuts-es': ['Atajos de teclado', 'Voltear la tarjeta', 'Super+Ctrl+Alt+F'],
         }
         for name, shown in expected.items():
             texts = self.pages[name][1]

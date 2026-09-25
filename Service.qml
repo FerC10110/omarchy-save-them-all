@@ -156,6 +156,13 @@ Scope {
     if (!started) cardsNotice = t("Hyprflip is busy; try again in a moment.")
   }
 
+  // One of Hyprflip's preferences (appearance, spacing, transition,
+  // duration, shortcut): they apply to every card.
+  function setOption(action, extra) {
+    cardsNotice = ""
+    flipConnection.run(action, extra, { reopen: true })
+  }
+
   function submitDraft() {
     if (!draft) return
     if (!Builder.ready(draft)) { builderNotice = t("Put at least one window on each side."); return }

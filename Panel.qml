@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
+import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "I18n.js" as I18n
@@ -42,8 +43,9 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   // Tabs, in order, and every page by name. Later tasks add entries.
-  readonly property var tabs: ["workspace", "cards"]
-  readonly property var pages: ({ workspace: "WorkspaceTab.qml", cards: "CardsTab.qml", builder: "CardBuilder.qml" })
+  readonly property var tabs: ["workspace", "cards", "settings"]
+  readonly property var pages: ({ workspace: "WorkspaceTab.qml", cards: "CardsTab.qml", settings: "SettingsTab.qml",
+                                  shortcuts: "ShortcutsPage.qml", builder: "CardBuilder.qml" })
   property string pageName: "workspace"
   readonly property bool onTab: tabs.indexOf(pageName) >= 0
   readonly property bool wide: pageName === "builder"
@@ -54,6 +56,7 @@ Panel {
     switch (id) {
     case "workspace": return t("Workspace")
     case "cards": return t("Cards")
+    case "settings": return t("Settings")
     default: return id
     }
   }
@@ -258,6 +261,12 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
+    // While a shortcut is being recorded, Hyprland must not act on it.
+    property ShortcutInhibitor shortcutCapture: ShortcutInhibitor {
+      window: panel
+      enabled: panel.open && page.item !== null && page.item.recording === true
+      onCancelled: if (page.item && typeof page.item.stopRecording === "function") page.item.stopRecording()
+    }
     contentWidth: panel.fittedContentWidth(root.wide ? Style.space(760) : Style.space(360))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, root.wide ? Style.space(760) : Style.space(640))
 

@@ -82,4 +82,5 @@ QtObject {
   function cancelBuilder() {}
   function startBuilder(card) {}
   function cardAction(action, card) {}
+  function setOption(action, extra) {}
 }
