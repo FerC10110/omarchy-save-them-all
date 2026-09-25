@@ -48,7 +48,9 @@ class RenderTest(unittest.TestCase):
                        XDG_CONFIG_HOME=str(root / 'config'), XDG_CACHE_HOME=str(root / 'cache'),
                        SAVE_THEM_ALL_STATE=str(root / 'state'), QT_QPA_PLATFORM='offscreen',
                        QT_QPA_PLATFORMTHEME='', QT_QUICK_BACKEND='software', LIBGL_ALWAYS_SOFTWARE='1',
-                       SAVE_THEM_ALL_RENDER_FIXTURE=str(FIXTURES / 'render.json'))
+                       SAVE_THEM_ALL_RENDER_FIXTURE=str(FIXTURES / 'render.json'),
+                       **({'SAVE_THEM_ALL_CAPTURE_DIR': os.environ['SAVE_THEM_ALL_CAPTURE_DIR']}
+                          if os.environ.get('SAVE_THEM_ALL_CAPTURE_DIR') else {}))
             done = subprocess.run([QUICKSHELL, '-p', str(root), '--no-color'], env=env,
                                   capture_output=True, text=True, timeout=180)
         cls.returncode = done.returncode

@@ -10,6 +10,10 @@ the terminal and three chart webapps, then spend a minute dragging them back
 into the shape you actually work in. Save Them All records that shape once and
 replays it on demand, or on its own every time you log in.
 
+With [Hyprflip](https://github.com/nocstah/hyprflip) it also keeps **flip
+cards**: windows grouped on two sides that flip in the same place. Save Them
+All builds them, saves them with the workspace and brings them back.
+
 ## Install
 
 ```sh
@@ -154,6 +158,52 @@ Entries in the Omarchy menu, in `~/.config/omarchy/extensions/omarchy-menu.jsonc
 "windows.restore": {"icon":"󰑓","label":"Restore them all","action":"restore-them-all"},
 ```
 
+### Cards
+
+Cards need Hyprflip, a Hyprland plugin, and its helper. Without them
+everything else works as before, and the Cards tab says what is missing and
+the command that fixes it.
+
+- **Cards tab**: every card on every workspace. `v` or `Enter` flips the one
+  chosen, `e` edits it, `d` takes it apart (its windows stay open), `u`
+  unfolds it, `t` floats or tiles it, and `n` makes a new one.
+- **The builder**: the card on the left, Front above and Back below, shaped
+  like the place it will take; the windows on the right, this workspace's
+  first. Drag a window onto a side, or walk the list with `j`/`k` and press
+  `f` (Front) or `r` (Back); `x` takes one out. A side holds up to five
+  windows, in a row or a column. Windows from another workspace move to the
+  card's when it is made.
+- **Pick on screen** (`e` in the builder) covers the monitor: click windows to
+  add them to the active side, `Tab` switches side, `Enter` goes back with
+  them. It stays on the monitor and workspace where it opened, and cancels if
+  that workspace changes while it is up.
+- **Settings** also gets Hyprflip's own preferences (appearance, spacing
+  between apps, animation) and its keyboard shortcuts, with conflicts called
+  out. Editing a shortcut is keyboard-driven: `Enter` starts recording, then
+  saves the chord just captured; `d` brings back the default; `Esc` cancels —
+  the recording first, then the row. Hyprland's own shortcuts stand aside only
+  while a new one is being recorded.
+
+**Save them all** saves the workspace's cards too, and **Restore them all**
+builds them again after the windows, once it has switched back to the saved
+workspace; if that workspace will not stay focused, cards are skipped with a
+note and every window is left visible rather than hidden. A card that is
+already built is left alone, and a window already in another card or group is
+never touched. If Hyprflip is not there, or its helper cannot build whole
+cards — too old, missing support for grouping windows, or a card with more
+windows on one side than it can hold — each card comes back instead as a
+native Hyprland group with tabs, the side that was on show in front, with a
+note saying why.
+
+If Hyprflip stops loading while cards are built (after a Hyprland update, for
+instance), the Workspace tab says **Cards paused** and offers **Show both
+faces**, which takes every window on the workspace out of its group.
+
+### Language
+
+Settings → Language: Automatic (the system language), English or Español. The
+notifications follow it too.
+
 ## How it works
 
 `save-them-all` walks the windows of the active workspace, sorted left to right
@@ -254,6 +304,10 @@ omarchy bar move io.github.ferc10110.save-them-all --section left
 | `SAVE_THEM_ALL_BROWSERS` | `chromium\|chrome\|brave\|vivaldi-bin\|msedge` | Browser process names to close cleanly, as a `pgrep` pattern |
 | `SAVE_THEM_ALL_QUIT_TIMEOUT` | `10` | Seconds to wait for the browser to quit before going on anyway |
 | `SAVE_THEM_ALL_MENU` | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | The menu file the switch edits |
+| `SAVE_THEM_ALL_LANG` | the Language setting | `en` or `es` for the scripts' notifications |
+| `SAVE_THEM_ALL_HYPRFLIP_HELPER` | `~/.local/lib/hyprflip/control.py` | Hyprflip's helper |
+| `SAVE_THEM_ALL_HYPRFLIP_SRC` | `~/.local/src/hyprflip-omacards` | Where Hyprflip's source is, for the fix commands shown |
+| `SAVE_THEM_ALL_HELPER_TIMEOUT` | `30` | Seconds a card may take to build before restoring gives up on it |
 
 ## Requirements
 
@@ -261,14 +315,19 @@ Omarchy 4 with Hyprland 0.56 or newer, on the dwindle layout. It leans on
 `hyprctl`'s Lua dispatchers, which replaced the old string syntax in 0.56, and
 on `jq`, `python3` and `pstree`, all of which ship with Omarchy.
 
+Cards are optional and need Hyprflip 0.3 with its helper (protocol 1).
+Building whole cards and taking them apart need a helper with the `create`
+(with sides) and `unpair` actions; an older helper still flips and edits
+nothing, and restoring falls back to native groups.
+
 ## Limitations
 
 - **Dwindle only.** The tree reconstruction is guillotine cuts; master and
   scrolling layouts are not handled.
 - **One monitor's workspace at a time.** A layout belongs to a workspace id, and
   restoring targets whichever workspace is active.
-- **Login restore needs the widget in the bar.** The panel is what starts it, so
-  a disabled plugin, or a bar without the widget, restores nothing at login.
+- **Login restore needs the plugin enabled.** Its service is what starts it,
+  so a disabled plugin restores nothing at login.
 - **Closing the browser cleanly covers the Omarchy menu only.** Logout, Reboot
   and Shutdown started some other way still close the browser abruptly, and so
   does a power cut or a frozen machine.
@@ -286,6 +345,14 @@ on `jq`, `python3` and `pstree`, all of which ship with Omarchy.
   like launching it from the menu, so a player or editor comes back without
   the file it had open. An app with no desktop entry is arranged when it is
   already open, and never launched.
+- **A card lives on one workspace.** Its windows move there when it is made.
+- **A card's hidden side has no live thumbnail.** Hyprland does not draw it, so
+  the builder shows its last picture, or its icon.
+- **A tiled card lands where Hyprflip puts it.** The plugin gives it an axis,
+  an order and proportions; Hyprflip decides its exact place in the layout. A
+  floating card keeps the position and size it was saved with.
+- **Hyprflip's own messages are in Spanish.** Its helper writes them; the rest
+  of the panel follows the Language setting.
 
 ## Remove
 
