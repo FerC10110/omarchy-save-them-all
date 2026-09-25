@@ -49,5 +49,12 @@
   "Card %1 was not rebuilt: one of its sides has none of its windows open": "La tarjeta %1 no se rearmó: una de sus caras no tiene ninguna ventana abierta",
   "Card %1 was left as it is: %2 is already in a card or group": "La tarjeta %1 quedó como estaba: %2 ya está en una tarjeta o grupo",
   "Card %1 could not be grouped: %2": "La tarjeta %1 no se pudo agrupar: %2",
-  "Some windows are still in a group; try again": "Algunas ventanas siguen en un grupo; probá de nuevo"
+  "Some windows are still in a group; try again": "Algunas ventanas siguen en un grupo; probá de nuevo",
+  "The Hyprflip helper stopped without an answer": "El asistente de Hyprflip se detuvo sin responder",
+  "The Hyprflip helper sent an unreadable answer": "El asistente de Hyprflip mandó una respuesta ilegible",
+  "The Hyprflip helper did not answer within %1 s": "El asistente de Hyprflip no respondió en %1 s",
+  "the Hyprflip helper cannot build whole cards; update it": "el asistente de Hyprflip no puede armar tarjetas enteras; actualizalo",
+  "Hyprflip is not available": "Hyprflip no está disponible",
+  "Cards were grouped as tabs instead: %1": "Las tarjetas se agruparon como pestañas: %1",
+  "Card %1 could not be rebuilt: %2": "La tarjeta %1 no se pudo rearmar: %2"
 }

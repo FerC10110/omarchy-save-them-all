@@ -9,6 +9,7 @@
     cards layout   --file F --addresses A        which windows wait outside the tree, and each card's place
     cards fallback --file F --addresses A        build the saved cards as native Hyprland groups
     cards ungroup  --workspace N                 let go of every native group on the workspace
+    cards rebuild  --file F --addresses A        build the saved cards with Hyprflip's create action
 
 Every command prints one JSON value. A (--addresses) is a JSON list aligned
 with the windows of a workspace file: each window's address, or null when it
@@ -37,6 +38,7 @@ AXES = {'horizontal': 'row', 'vertical': 'column'}
 MAX_PANES = 5
 PARKING = 'special:savethemall'   # the same hidden workspace restore-them-all parks windows on
 PAUSE = float(os.environ.get('SAVE_THEM_ALL_PAUSE') or 0.25)
+HELPER_TIMEOUT = float(os.environ.get('SAVE_THEM_ALL_HELPER_TIMEOUT') or 30)
 COMMANDS = {}
 
 
@@ -770,6 +772,124 @@ def ungroup(args):
         dispatch('hl.dsp.window.move({ out_of_group = true })')
         released += 1
     raise CardsError(msg('Some windows are still in a group; try again'))
+
+
+# -- restoring with Hyprflip -----------------------------------------------------
+
+def run_helper(request):
+    """One helper operation, start to end: every focus handoff is resumed
+    (nobody here holds a keyboard grab), every question refused (a restore
+    asks nothing) and the helper killed if it has not finished in
+    HELPER_TIMEOUT seconds. -> (kind, message)"""
+    try:
+        proc = subprocess.Popen(['python3', str(HELPER), 'run', '--request', json.dumps(request)],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError as error:
+        return 'error', str(error)
+    expired = threading.Event()
+
+    def expire():
+        expired.set()
+        proc.kill()
+    timer = threading.Timer(HELPER_TIMEOUT, expire)
+    timer.start()
+
+    def write(value):
+        try:
+            proc.stdin.write(json.dumps(value) + '\n')
+            proc.stdin.flush()
+        except (OSError, ValueError):
+            pass
+    outcome = ('error', msg('The Hyprflip helper stopped without an answer'))
+    try:
+        for line in proc.stdout:
+            try:
+                message = json.loads(line)
+            except ValueError:
+                outcome = ('error', msg('The Hyprflip helper sent an unreadable answer'))
+                continue
+            kind = message.get('type') if isinstance(message, dict) else None
+            if kind == 'handoff':
+                write({'resume': message.get('id')})
+            elif kind == 'question':
+                write({'cancel': True})
+            elif kind in ('done', 'error', 'cancelled'):
+                outcome = (kind, str(message.get('message') or ''))
+        proc.wait()
+        errors = proc.stderr.read()
+    finally:
+        timer.cancel()
+    if expired.is_set():
+        return 'error', msg('The Hyprflip helper did not answer within %1 s', f'{HELPER_TIMEOUT:g}')
+    if errors.strip():
+        log('helper: ' + errors.strip()[-500:])
+    return outcome
+
+
+@command('rebuild')
+def rebuild(args):
+    path = Path(args.file or '')
+    windows, cards, problem = read_file(path)
+    addresses = addresses_arg(args)
+    if problem:
+        return {'built': 0, 'kept': 0, 'notes': [note(msg('Cards in %1 were ignored: %2', path.name, problem))]}
+    try:
+        snapshot = helper_snapshot()
+    except CardsError as error:
+        snapshot = {'error': str(error)}
+    if not snapshot.get('available') or not (snapshot.get('capabilities') or {}).get('create_faces'):
+        why = (msg('the Hyprflip helper cannot build whole cards; update it') if snapshot.get('available')
+               else snapshot.get('error') or msg('Hyprflip is not available'))
+        return fallback_cards(path.name, windows, cards, '', addresses,
+                              [note(msg('Cards were grouped as tabs instead: %1', why))])
+    result = {'built': 0, 'kept': 0, 'notes': []}
+    for card in cards:
+        title = saved_title(card, windows)
+        faces = present(card, addresses)
+        if not all(faces):
+            result['notes'].append(note(msg('Card %1 was not rebuilt: one of its sides has none of its windows open', title)))
+            continue
+        members = faces[0] + faces[1]
+        try:
+            containers = (flip_status() or {}).get('containers', [])
+            now = clients()
+        except CardsError as error:
+            result['notes'].append(note(msg('Card %1 could not be rebuilt: %2', title, error)))
+            continue
+        if any(c.get('faces') == faces for c in containers):
+            result['kept'] += 1
+            continue
+        owned = {a for c in containers for f in c.get('faces', []) for a in f}
+        busy = next((a for a in members if a in owned or now.get(a, {}).get('grouped')), None)
+        if busy:
+            result['notes'].append(note(msg('Card %1 was left as it is: %2 is already in a card or group',
+                                            title, app_name(now[busy].get('class')))))
+            continue
+        try:
+            context = helper_snapshot().get('context')
+        except CardsError:
+            context = None
+        if not context:
+            result['notes'].append(note(msg('Card %1 could not be rebuilt: %2', title, msg('Hyprflip is not available'))))
+            continue
+        weights = [ratios([r for i, r in zip(f['windows'], f['ratios']) if i < len(addresses) and addresses[i]],
+                          len(faces[n])) for n, f in enumerate(card['faces'])]
+        kind, message = run_helper({'protocol': 1, 'action': 'create', 'context': context,
+                                    'faces': [['address:' + a for a in f] for f in faces],
+                                    'axes': [f['axis'] for f in card['faces']], 'ratios': weights,
+                                    'visible': card['visible'], 'floating': card['floating']})
+        if kind != 'done':
+            result['notes'].append(note(msg('Card %1 could not be rebuilt: %2', title, message or kind)))
+            continue
+        result['built'] += 1
+        if card['name']:
+            try:
+                new = next((c for c in (flip_status() or {}).get('containers', []) if c.get('faces') == faces), None)
+            except CardsError:
+                new = None
+            if new:
+                set_name(new['id'], card['name'])
+    return result
 
 
 def main(argv=None):
