@@ -243,7 +243,11 @@ Scope {
 
   // A window of the draft closed: it leaves the card, the rest stays.
   function pruneDraft(before) {
-    if (pickDraft) pickDraft = Builder.prune(pickDraft, clients).draft
+    // Only when a picked window closed: most refreshes close nothing.
+    if (pickDraft) {
+      var picked = Builder.prune(pickDraft, clients)
+      if (picked.gone.length > 0) pickDraft = picked.draft
+    }
     if (!draft) return
     var r = Builder.prune(draft, clients)
     if (r.gone.length === 0) return
