@@ -196,20 +196,25 @@ monitor=$(hyprctl -j activeworkspace | jq -r '.monitor')
 out="$STATE_DIR/workspace-$ws.json"
 
 # A card hides the windows of its other side, and those are saved too: with
-# Hyprflip, the members of the workspace's cards; without it, the hidden
-# windows of native groups whose class belonged to a card saved before.
-flip=$("$BIN_DIR/cards" status --workspace "$ws" 2>/dev/null | jq -r '.available == true' 2>/dev/null || echo false)
+# Hyprflip loaded, the members of the workspace's live cards; without it, the
+# hidden windows of native groups whose class and launcher belonged to a card
+# saved before.
+status=$("$BIN_DIR/cards" status --workspace "$ws" --previous "$out" 2>/dev/null) || status='{}'
+flip=$(jq -r '.available == true' <<<"$status" 2>/dev/null || echo false)
+reason=$(jq -r '.reason // ""' <<<"$status" 2>/dev/null || echo '')
 if [[ $flip == true ]]; then
   members=$("$BIN_DIR/cards" members --workspace "$ws" 2>/dev/null) || members='[]'
 else
   members=$("$BIN_DIR/cards" members --workspace "$ws" --previous "$out" 2>/dev/null) || members='[]'
 fi
 
-# Without Hyprflip, `cards members` matched those hidden windows by class;
-# their launcher must match too, when the previous save kept one: the card's
-# windows as they were saved, as [{class, launch, known}].
+# Without Hyprflip (not loaded, or loaded but not answering: `cards members`
+# then reads the previous file), those hidden windows matched by class; their
+# launcher must match too, when the previous save kept one: the card's
+# windows as they were saved, as [{class, launch, known}]. With Hyprflip
+# loaded but its helper unusable, members are its live cards': no filter.
 card_keys=null
-if [[ $flip != true && $members != '[]' ]]; then
+if [[ ($reason == no-plugin || $reason == mismatch) && $members != '[]' ]]; then
   card_keys=$(jq -c '.windows as $w | [.cards[]?.faces[]?.windows[]? | $w[.]? | select(type == "object")
     | {class, launch, known: has("launch")}]' "$out" 2>/dev/null) || card_keys=null
 fi
@@ -251,7 +256,7 @@ if ((n == 0)); then
 fi
 
 # The cards: asked to Hyprflip, or kept from the previous save when Hyprflip
-# is not there to ask. bin/cards prints {cards, notes}.
+# is not there to ask. bin/cards prints {cards, notes}; preserve adds {warnings}.
 # A previous file that cannot be read is a warning: shown when notifying
 # anyway, never a reason to notify a --quiet save (1.3 was silent there).
 none='{"cards":[],"notes":[]}'

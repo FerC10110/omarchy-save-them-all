@@ -100,6 +100,21 @@ class SaveCardsTest(ScriptTest):
         self.assertEqual(self.hidden_kitty_after_a_card_of({'kind': 'terminal', 'session': 'tmux'}),
                          ['org.gnome.Calculator'])
 
+    def test_with_hyprflip_loaded_and_its_helper_unusable_live_hidden_sides_are_saved(self):
+        # Only the no-Hyprflip path matches hidden windows against the
+        # previous file's cards; with Hyprflip loaded they come from its live
+        # cards, and a previous file with no cards must not filter them out.
+        self.write_saved(3, [saved_window('kitty', (0, 0), (960, 1080), TERMINAL)])
+        self.with_card([container(1, [['0x2'], ['0x3']])])
+        for env in ({'SAVE_THEM_ALL_HYPRFLIP_HELPER': str(self.tmp / 'none.py')}, None):
+            with self.subTest(env=env):
+                if env is None:
+                    self.helper_config(available=False, error='boom')
+                r = self.run_script('save-them-all', '--quiet', env=env)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual([w['class'] for w in self.saved(3)['windows']],
+                                 ['kitty', 'org.gnome.Calculator', 'obsidian'])
+
     def test_without_hyprflip_or_a_previous_file_a_hidden_window_is_not_saved(self):
         self.hypr_state(clients=[
             client('0x2', 'org.gnome.Calculator', size=(960, 1080), grouped=['0x2', '0x3']),
