@@ -329,3 +329,16 @@ class StatusHelperTest(ScriptTest):
     def test_the_plugin_list_is_asked_once(self):
         self.assertEqual(self.cards_json('status')['reason'], 'ok')
         self.assertEqual(self.queries().count('plugin list'), 1)
+
+
+class StatusForASaveTest(ScriptTest):
+    def test_no_card_on_the_workspace_skips_the_helper(self):
+        self.helper_config(available=False, error='boom')
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip([container(1, [['0x8'], ['0x9']])]),
+                        clients=[client('0x8', 'a', ws=4), client('0x9', 'b', ws=4, hidden=True)])
+        s = self.cards_json('status', '--workspace', '3')
+        self.assertEqual((s['available'], s['reason'], s['helper_checked']), (True, 'ok', False))
+        self.assertEqual(self.helper_snapshots(), 0)
+        s = self.cards_json('status', '--workspace', '4')
+        self.assertEqual((s['available'], s['reason']), (False, 'helper'))
+        self.assertEqual(self.cards_json('status')['reason'], 'helper')

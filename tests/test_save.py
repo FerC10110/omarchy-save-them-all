@@ -1,6 +1,7 @@
 """Saving a workspace saves its cards: from Hyprflip when it is there, kept from
 the previous save when it is not."""
 import json
+import time
 
 from scripttest import ScriptTest, client, container, flip, pair, saved_window
 
@@ -138,6 +139,32 @@ class SaveCardsTest(ScriptTest):
         self.write_saved(3, windows, cards=[{'faces': 'bad'}])
         r = self.run_script('save-them-all')
         self.assertIn('The cards saved before were ignored: card 1 needs exactly two sides', self.notifications()[-1][1])
+
+    def test_saving_without_hyprflip_never_asks_its_helper(self):
+        self.hypr_state(clients=[client('0x1', 'kitty', tags=['terminal'])])
+        self.assertEqual(self.run_script('save-them-all').returncode, 0)
+        self.assertEqual(self.helper_snapshots(), 0)
+
+    def test_saving_a_workspace_with_no_cards_never_asks_the_helper(self):
+        # Every save used to wait on a helper snapshot (15 s when it hangs)
+        # even with no card to save; Hyprflip's own status says there is none.
+        self.helper_config(snapshot='hang')
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip([container(1, [['0x8'], ['0x9']])]), clients=[
+            client('0x1', 'kitty', tags=['terminal']),
+            client('0x8', 'a', ws=4), client('0x9', 'b', ws=4, hidden=True)])
+        started = time.monotonic()
+        r = self.run_script('save-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual(self.helper_snapshots(), 0)
+        self.assertEqual([w['class'] for w in self.saved(3)['windows']], ['kitty'])
+        self.assertNotIn('cards', self.saved(3))
+
+    def test_saving_a_workspace_with_cards_still_checks_the_helper(self):
+        self.with_card([container(7, [['0x2'], ['0x3', '0x4']])])
+        self.assertEqual(self.run_script('save-them-all').returncode, 0)
+        self.assertEqual(self.helper_snapshots(), 1)
+        self.assertEqual(len(self.saved(3)['cards']), 1)
 
     def test_login_list_counts_cards(self):
         card = {'faces': [{'windows': [0]}, {'windows': [1]}]}

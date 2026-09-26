@@ -198,7 +198,7 @@ out="$STATE_DIR/workspace-$ws.json"
 # A card hides the windows of its other side, and those are saved too: with
 # Hyprflip, the members of the workspace's cards; without it, the hidden
 # windows of native groups whose class belonged to a card saved before.
-flip=$("$BIN_DIR/cards" status 2>/dev/null | jq -r '.available == true' 2>/dev/null || echo false)
+flip=$("$BIN_DIR/cards" status --workspace "$ws" 2>/dev/null | jq -r '.available == true' 2>/dev/null || echo false)
 if [[ $flip == true ]]; then
   members=$("$BIN_DIR/cards" members --workspace "$ws" 2>/dev/null) || members='[]'
 else
