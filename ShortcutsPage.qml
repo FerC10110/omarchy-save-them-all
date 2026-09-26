@@ -53,6 +53,7 @@ Column {
 
   function choose(row) {
     if (!row.editable) return
+    cursor = row.id
     selectedId = row.id
     candidateMask = row.mask
     candidateKey = row.key
@@ -100,9 +101,12 @@ Column {
 
   function stopRecording() { recording = false }
 
+  // While a row is selected, Enter and Save act on it: the highlight stays
+  // on it too (j/k do nothing) until Esc lets go of it, so what is lit is
+  // always what Enter changes.
   function move(dx, dy) {
     if (dy === 0) return false
-    cursor = Labels.step(bindings.rows, cursor, dy)
+    if (!selected) cursor = Labels.step(bindings.rows, cursor, dy)
     return true
   }
 
