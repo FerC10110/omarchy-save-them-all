@@ -158,15 +158,15 @@ Column {
     wrapMode: Text.WordWrap
   }
 
-  // What the last save said, the way CardsTab shows cardAction's result
-  // (Fix round 1, Finding 3): busy first, then a failure, then whatever
-  // bin/cards said outside this page's own edit.
+  // What the last shortcut save said (only that: other preferences are the
+  // Settings tab's), the way CardsTab shows cardAction's result: busy
+  // first, then the notice.
   Text {
     width: parent.width
     visible: text !== ""
     textFormat: Text.PlainText
-    text: service.flip.busy ? host.t("Working…") : (service.flip.failed ? service.flip.notice : service.cardsNotice)
-    color: service.flip.failed ? host.urgent : host.dim
+    text: service.flip.busy ? host.t("Working…") : (service.optionAction === "shortcut" ? service.optionNotice : "")
+    color: !service.flip.busy && service.optionFailed ? host.urgent : host.dim
     font.family: host.fontFamily
     font.pixelSize: Style.font.bodySmall
     wrapMode: Text.WordWrap

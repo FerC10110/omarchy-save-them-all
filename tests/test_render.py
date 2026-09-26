@@ -113,6 +113,7 @@ class RenderTest(unittest.TestCase):
             'shortcuts-es': ['Atajos de teclado', 'Voltear la tarjeta', 'Super+Ctrl+Alt+F'],
             'settings-failed-es': ['Hyprflip está ocupado; probá de nuevo en un momento.'],
             'shortcuts-busy-en': ['Working…'],
+            'shortcuts-own-notice-en': ['Flip the card: Super+G'],
             'pick-es': ['Sumando a: Frente', '2 elegidas', 'Clic en una ventana', 'Reverso'],
         }
         for name, shown in expected.items():
@@ -146,6 +147,9 @@ class RenderTest(unittest.TestCase):
             'settings-unsettled-es': ['Hyprflip no está disponible', 'Apariencia de la tarjeta', 'Velocidad'],
             'workspace-card-notice-es': ['Tarjeta creada.'],
             'builder-notice-es': ['1 ventanas'],
+            'settings-other-notices-es': ['Tarjeta creada.', 'Voltear la tarjeta: Super+G'],
+            'shortcuts-own-notice-en': ['Card created.'],
+            'cards-other-notices-en': ['Hyprflip is busy; try again in a moment.'],
         }
         for name, unshown in hidden.items():
             texts = self.pages[name][1]
@@ -278,6 +282,14 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(r['unknown'], {'busy': False, 'failed': False, 'notice': 'Algo que el asistente dice ahora.'})
         self.assertEqual(r['spanish'], {'busy': False, 'failed': False,
                                         'notice': 'Animación actualizada para todas las tarjetas.'})
+
+    def test_each_page_gets_its_own_notice(self):
+        r = self.result('notices')
+        self.assertEqual(r['card'], {'cardsNotice': 'The card changed. Refresh the list before changing it.',
+                                     'cardsFailed': True, 'optionUntouched': True})
+        self.assertEqual(r['option'], {'cardsNotice': 'The card changed. Refresh the list before changing it.',
+                                       'cardsFailed': True, 'optionNotice': 'Animation updated for every card.',
+                                       'optionFailed': False, 'optionAction': 'duration'})
 
     def test_a_hung_helper_is_stopped(self):
         r = self.result('watchdog-operation')

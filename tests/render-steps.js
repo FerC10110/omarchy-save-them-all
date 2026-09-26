@@ -76,7 +76,15 @@ var STEPS = [
   // action silently (Task 15 fix round 1): both pages show it the way
   // CardsTab shows cardAction's result.
   { name: "settings-failed-es", page: "SettingsTab.qml", lang: "es",
-    patch: { failed: true, notice: "Hyprflip está ocupado; probá de nuevo en un momento." } },
+    patch: { optionAction: "duration", optionFailed: true, optionNotice: "Hyprflip está ocupado; probá de nuevo en un momento." } },
+  // Each page shows its own notices only: a card action's stays on Cards,
+  // a shortcut's on Shortcuts, a preference's on Settings.
+  { name: "settings-other-notices-es", page: "SettingsTab.qml", lang: "es",
+    patch: { cardsNotice: "Tarjeta creada.", optionAction: "shortcut", optionNotice: "Voltear la tarjeta: Super+G" } },
+  { name: "shortcuts-own-notice-en", page: "ShortcutsPage.qml", lang: "en",
+    patch: { cardsNotice: "Card created.", optionAction: "shortcut", optionNotice: "Flip the card: Super+G" } },
+  { name: "cards-other-notices-en", page: "CardsTab.qml", lang: "en",
+    patch: { optionAction: "duration", optionFailed: true, optionNotice: "Hyprflip is busy; try again in a moment." } },
   { name: "shortcuts-busy-en", page: "ShortcutsPage.qml", lang: "en", patch: { busy: true } },
   // Enter picked "flip"; j then must not walk the highlight off the row that
   // Enter (and Save) act on while it is selected.

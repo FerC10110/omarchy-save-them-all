@@ -34,7 +34,13 @@ Scope {
   property var panels: []           // every bar panel that opened (one per monitor)
   property var clients: []
   property var names: ({})
-  property string cardsNotice: ""   // what the last card action said (Cards tab)
+  // Each page's own word on how its last action went: a card action's on
+  // the Cards tab; a preference's on Settings, or Shortcuts for a shortcut.
+  property string cardsNotice: ""
+  property bool cardsFailed: false
+  property string optionNotice: ""
+  property bool optionFailed: false
+  property string optionAction: ""  // which preference it was about
   property string ungroupNotice: "" // how "Show both faces" went (Workspace tab)
   property bool ungroupFailed: false
   property var ungroupCode: null    // its exit code and last stderr line, read in either order
@@ -179,17 +185,27 @@ Scope {
   function cardAction(action, card) {
     if (!card) return
     cardsNotice = ""
+    cardsFailed = false
     var started = flipConnection.run(action, {}, { card: CardsModel.reference(card), workspace: card.workspace, reopen: true,
                                                    from: panel })
-    if (!started) cardsNotice = t("Hyprflip is busy; try again in a moment.")
+    if (!started) {
+      cardsNotice = t("Hyprflip is busy; try again in a moment.")
+      cardsFailed = true
+    }
   }
 
   // One of Hyprflip's preferences (appearance, spacing, transition,
   // duration, shortcut): they apply to every card. -> whether it was sent.
+  readonly property var optionActions: ["appearance", "spacing", "transition", "duration", "shortcut"]
   function setOption(action, extra) {
-    cardsNotice = ""
+    optionAction = action
+    optionNotice = ""
+    optionFailed = false
     var started = flipConnection.run(action, extra, { reopen: true, from: panel })
-    if (!started) cardsNotice = t("Hyprflip is busy; try again in a moment.")
+    if (!started) {
+      optionNotice = t("Hyprflip is busy; try again in a moment.")
+      optionFailed = true
+    }
     return started
   }
 
@@ -269,9 +285,15 @@ Scope {
     var from = (pending && pending.options && pending.options.from) || panel
     var ws = flipConnection.sent && flipConnection.sent.context ? flipConnection.sent.context.workspace : 0
     if (reopen && from && (!ws || ws === focusedWorkspace)) from.reveal()
-    if (action === "create" && draft) {
+    if (optionActions.indexOf(action) >= 0) {
+      // message: the helper's own (in the panel's language), or why it failed.
+      optionAction = action
+      optionNotice = message
+      optionFailed = !ok
+    } else if (action === "create" && draft) {
       if (ok) {
         cardsNotice = draft.mode === "edit" ? t("Changes saved.") : t("Card created.")
+        cardsFailed = false
         namedFaces = draft.faces
         pendingName = draft.name
         draft = null
@@ -280,8 +302,11 @@ Scope {
       } else {
         builderNotice = message || t("The card could not be made.")
       }
+    } else if (action !== "create" || !ok) {
+      // flip, unfold, floating, unpair; or a create whose builder is gone.
+      cardsFailed = !ok
+      cardsNotice = ok && action === "unpair" ? t("Card taken apart; its windows stay open.") : message
     }
-    if (action === "unpair" && ok) cardsNotice = t("Card taken apart; its windows stay open.")
   }
 
   Hyprflip {

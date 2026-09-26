@@ -194,6 +194,30 @@ ShellRoot {
       { log: function(c) { return { error: c.error, unknown: c.unknown, spanish: c.spanish } } },
     ] },
 
+    // Each page's own notice: a card action's on Cards, a preference's on
+    // Settings (or Shortcuts, for a shortcut).
+    { name: "notices", steps: [
+      { sh: "printf 'error:La tarjeta cambió. Actualiza Tarjetas antes de editarla.' > run-mode" },
+      { run: function(c) {
+        c.before = { optionNotice: service.optionNotice, optionFailed: service.optionFailed }
+        service.cardAction("flip", harness.card(1))
+      } },
+      { until: function(c) { return !flip.busy }, ms: 8000 },
+      { run: function(c) {
+        c.card = { cardsNotice: service.cardsNotice, cardsFailed: service.cardsFailed,
+                   optionUntouched: service.optionNotice === c.before.optionNotice
+                     && service.optionFailed === c.before.optionFailed }
+      } },
+      { sh: "printf done > run-mode" },
+      { run: function(c) { service.setOption("duration", { duration_ms: 420 }) } },
+      { until: function(c) { return !flip.busy }, ms: 8000 },
+      { run: function(c) {
+        c.option = { cardsNotice: service.cardsNotice, cardsFailed: service.cardsFailed, optionNotice: service.optionNotice,
+                     optionFailed: service.optionFailed, optionAction: service.optionAction }
+      } },
+      { log: function(c) { return { card: c.card, option: c.option } } },
+    ] },
+
     // A helper that never answers is stopped; the panel is usable again.
     { name: "watchdog-operation", steps: [
       { sh: "printf hang > run-mode" },

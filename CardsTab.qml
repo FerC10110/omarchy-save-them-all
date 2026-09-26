@@ -97,8 +97,8 @@ Column {
     width: parent.width
     visible: text !== ""
     textFormat: Text.PlainText
-    text: tab.flip.busy ? host.t("Working…") : (tab.flip.failed ? tab.flip.notice : tab.service.cardsNotice)
-    color: tab.flip.failed ? host.urgent : host.dim
+    text: tab.flip.busy ? host.t("Working…") : tab.service.cardsNotice
+    color: !tab.flip.busy && tab.service.cardsFailed ? host.urgent : host.dim
     font.family: host.fontFamily
     font.pixelSize: Style.font.bodySmall
     wrapMode: Text.WordWrap

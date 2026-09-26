@@ -151,15 +151,16 @@ Column {
     wrapMode: Text.WordWrap
   }
 
-  // What the last setOption()/language/check said, the way CardsTab shows
-  // cardAction's result (Fix round 1, Finding 3): busy first, then a
-  // failure, then whatever bin/cards said outside a card action.
+  // What the last preference set here said (not a shortcut's: that one is
+  // the Shortcuts page's, and a card action's is the Cards tab's), the way
+  // CardsTab shows cardAction's result: busy first, then the notice.
+  readonly property bool ownNotice: service.optionAction !== "" && service.optionAction !== "shortcut"
   Text {
     width: parent.width
     visible: text !== ""
     textFormat: Text.PlainText
-    text: tab.flip.busy ? host.t("Working…") : (tab.flip.failed ? tab.flip.notice : tab.service.cardsNotice)
-    color: tab.flip.failed ? host.urgent : host.dim
+    text: tab.flip.busy ? host.t("Working…") : (tab.ownNotice ? tab.service.optionNotice : "")
+    color: !tab.flip.busy && tab.service.optionFailed ? host.urgent : host.dim
     font.family: host.fontFamily
     font.pixelSize: Style.font.bodySmall
     wrapMode: Text.WordWrap

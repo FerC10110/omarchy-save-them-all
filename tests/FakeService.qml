@@ -18,6 +18,10 @@ QtObject {
   property var draft: null
   property string builderNotice: ""
   property string cardsNotice: ""
+  property bool cardsFailed: false
+  property string optionNotice: ""
+  property bool optionFailed: false
+  property string optionAction: ""
   property string ungroupNotice: ""
   property bool ungroupFailed: false
   property var pickDraft: null
@@ -65,6 +69,10 @@ QtObject {
     pickFace = f.pickFace || 0
     builderNotice = f.builderNotice || ""
     cardsNotice = f.cardsNotice || ""
+    cardsFailed = f.cardsFailed === true
+    optionNotice = f.optionNotice || ""
+    optionFailed = f.optionFailed === true
+    optionAction = f.optionAction || ""
     ungroupNotice = f.ungroupNotice || ""
     ungroupFailed = f.ungroupFailed === true
     flip.status = f.status || { available: true, reason: "ok" }
