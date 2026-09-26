@@ -271,6 +271,19 @@ ShellRoot {
       { sh: "printf done > run-mode" },
       { log: function(c) { return { stopped: c.stopped } } },
     ] },
+
+    // "Show both faces": a word when it worked, the script's error when not.
+    { name: "ungroup", steps: [
+      { run: function(c) { service.ungroup(3) } },
+      { until: function(c) { return service.ungroupNotice !== "" }, ms: 3000 },
+      { run: function(c) { c.ok = { notice: service.ungroupNotice, failed: service.ungroupFailed } } },
+      { sh: "touch ungroup-fails" },
+      { run: function(c) { service.ungroup(3) } },
+      { until: function(c) { return service.ungroupFailed === true }, ms: 3000 },
+      { run: function(c) { c.failed = { notice: service.ungroupNotice, failed: service.ungroupFailed } } },
+      { sh: "rm -f ungroup-fails" },
+      { log: function(c) { return { ok: c.ok, failed: c.failed } } },
+    ] },
   ]
 
   property int scenario: -1

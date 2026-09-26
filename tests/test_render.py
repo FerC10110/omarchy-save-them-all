@@ -89,6 +89,7 @@ class RenderTest(unittest.TestCase):
             'workspace-empty-es': ['Todavía no hay nada guardado para este escritorio.'],
             'workspace-unsettled-es': ['Escritorio 3'],
             'workspace-cards-notice-es': ['Algunas ventanas siguen en un grupo; probá de nuevo'],
+            'workspace-ungrouped-es': ['Todas las ventanas de este escritorio salieron de su grupo.'],
             'builder-new-en': ['New card', 'Front', 'Back', 'Create card', 'Windows', 'kitty · left', 'Pick on screen'],
             'builder-edit-es': ['Editar tarjeta', 'Frente', 'Reverso', 'Guardar cambios', 'Cancelar'],
             'builder-notice-es': ['Una cara admite hasta 5 ventanas.', 'Nueva tarjeta', '＋ soltá acá', 'Escritorio 3 · 1 ventana'],
@@ -320,3 +321,8 @@ class ServiceTest(unittest.TestCase):
         r = self.result('crash')
         self.assertEqual(r['stopped'], {'busy': False, 'failed': True, 'notice': 'The Hyprflip helper stopped. Try again.'})
         self.assertIn('helper exit 3: BOOM-MARKER the helper fell over', self.log)
+
+    def test_show_both_faces_says_how_it_went(self):
+        r = self.result('ungroup')
+        self.assertEqual(r['ok'], {'notice': 'Every window on this workspace is out of its group.', 'failed': False})
+        self.assertEqual(r['failed'], {'notice': 'Algunas ventanas siguen en un grupo; probá de nuevo', 'failed': True})

@@ -19,6 +19,7 @@ QtObject {
   property string builderNotice: ""
   property string cardsNotice: ""
   property string ungroupNotice: ""
+  property bool ungroupFailed: false
   property var pickDraft: null
   property int pickFace: 0
   // Every action a page called, as [name, args…]: what a step's `expect`
@@ -65,6 +66,7 @@ QtObject {
     builderNotice = f.builderNotice || ""
     cardsNotice = f.cardsNotice || ""
     ungroupNotice = f.ungroupNotice || ""
+    ungroupFailed = f.ungroupFailed === true
     flip.status = f.status || { available: true, reason: "ok" }
     flip.snapshot = Protocol.parseSnapshot(JSON.stringify(Object.assign({}, f.snapshot || {}, f.snapshotPatch || {}))).snapshot
     if (f.emptyCards) flip.snapshot = Object.assign({}, flip.snapshot, { cards: [] })

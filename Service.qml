@@ -35,7 +35,10 @@ Scope {
   property var clients: []
   property var names: ({})
   property string cardsNotice: ""   // what the last card action said (Cards tab)
-  property string ungroupNotice: "" // what bin/cards ungroup said when it failed (Workspace tab)
+  property string ungroupNotice: "" // how "Show both faces" went (Workspace tab)
+  property bool ungroupFailed: false
+  property var ungroupCode: null    // its exit code and last stderr line, read in either order
+  property var ungroupError: null
   readonly property var byAddress: {
     var out = {}
     clients.forEach(function(c) { out[c.address] = c })
@@ -105,6 +108,9 @@ Scope {
   function ungroup(workspace) {
     if (ungroupProcess.running) return
     ungroupNotice = ""
+    ungroupFailed = false
+    ungroupCode = null
+    ungroupError = null
     ungroupProcess.command = [binDir + "/cards", "ungroup", "--workspace", String(workspace)]
     ungroupProcess.running = true
   }
@@ -367,6 +373,15 @@ Scope {
     }
   }
 
+  // Once both the exit code and stderr are in: a word when it worked, what
+  // bin/cards said (already translated) when it did not.
+  function ungroupDone() {
+    if (ungroupCode === null || ungroupError === null) return
+    ungroupFailed = ungroupCode !== 0
+    ungroupNotice = !ungroupFailed ? t("Every window on this workspace is out of its group.")
+      : ungroupError || t("Could not take the windows out of their groups.")
+  }
+
   Process {
     id: ungroupProcess
     environment: ({ SAVE_THEM_ALL_LANG: root.lang })
@@ -374,11 +389,13 @@ Scope {
       waitForEnd: true
       onStreamFinished: {
         var message = String(text || "").trim()
-        if (message !== "") root.ungroupNotice = message.split("\n").pop().replace(/^cards: /, "")
+        root.ungroupError = message === "" ? "" : message.split("\n").pop().replace(/^cards: /, "")
+        root.ungroupDone()
       }
     }
     onExited: function(exitCode) {
-      if (exitCode === 0) root.ungroupNotice = ""
+      root.ungroupCode = exitCode
+      root.ungroupDone()
       root.refreshClients()
       flipConnection.check()
     }

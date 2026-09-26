@@ -61,14 +61,14 @@ Column {
     wrapMode: Text.WordWrap
   }
 
-  // What bin/cards last said about an action outside a card, translated
-  // (e.g. "Show both faces" could not release every window).
+  // How "Show both faces" went: done, or what bin/cards said (translated)
+  // when it could not release every window, in the warning color.
   Text {
     textFormat: Text.PlainText
     width: parent.width
     visible: tab.service && tab.service.ungroupNotice !== ""
     text: tab.service ? tab.service.ungroupNotice : ""
-    color: host.urgent
+    color: tab.service && tab.service.ungroupFailed ? host.urgent : host.dim
     font.family: host.fontFamily
     font.pixelSize: Style.font.bodySmall
     wrapMode: Text.WordWrap

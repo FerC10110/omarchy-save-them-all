@@ -39,6 +39,8 @@ var STRINGS = {
     "Something went wrong. Check the notification.": "Algo salió mal. Mirá la notificación.",
     "Cards paused": "Tarjetas en pausa",
     "Show both faces": "Mostrar las dos caras",
+    "Every window on this workspace is out of its group.": "Todas las ventanas de este escritorio salieron de su grupo.",
+    "Could not take the windows out of their groups.": "No se pudieron sacar las ventanas de sus grupos.",
     "Take this workspace's windows out of their groups so none stays hidden": "Sacar las ventanas de este escritorio de sus grupos para que ninguna quede escondida",
     "Save them all": "Guardar todas",
     "Save every window on this workspace (s)": "Guardar todas las ventanas de este escritorio (s)",
