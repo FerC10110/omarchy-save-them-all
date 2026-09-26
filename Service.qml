@@ -31,6 +31,7 @@ Scope {
     Quickshell.env("LC_ALL") || Quickshell.env("LC_MESSAGES") || Quickshell.env("LANG") || "")
 
   property var panel: null          // the bar panel shown last
+  property var panels: []           // every bar panel that opened (one per monitor)
   property var clients: []
   property var names: ({})
   property string cardsNotice: ""   // what the last card action said (Cards tab)
@@ -65,12 +66,19 @@ Scope {
   function appName(win) { return AppNames.resolve(win, entries).name }
   function appIcon(win) { return AppNames.resolve(win, entries).icon }
 
-  // The panel calls this when it opens: it is the one to close for a
-  // handoff and to show again afterwards.
+  // The panel calls this when it opens: the one to show again after an
+  // action. Every panel that opened is kept too, for dismiss().
   function attach(p) {
     panel = p
+    if (panels.indexOf(p) < 0) panels = panels.filter(function(x) { return !!x }).concat([p])
     flipConnection.check()
     refreshClients()
+  }
+
+  // Hyprflip's handoff: the helper waits until no panel holds the keyboard,
+  // so every open one closes, on any monitor, not only the last one shown.
+  function dismiss() {
+    panels.forEach(function(p) { if (p && p.opened) p.dismiss() })
   }
 
   function setLanguage(value) {
@@ -158,7 +166,8 @@ Scope {
   function cardAction(action, card) {
     if (!card) return
     cardsNotice = ""
-    var started = flipConnection.run(action, {}, { card: CardsModel.reference(card), workspace: card.workspace, reopen: true })
+    var started = flipConnection.run(action, {}, { card: CardsModel.reference(card), workspace: card.workspace, reopen: true,
+                                                   from: panel })
     if (!started) cardsNotice = t("Hyprflip is busy; try again in a moment.")
   }
 
@@ -166,7 +175,7 @@ Scope {
   // duration, shortcut): they apply to every card. -> whether it was sent.
   function setOption(action, extra) {
     cardsNotice = ""
-    var started = flipConnection.run(action, extra, { reopen: true })
+    var started = flipConnection.run(action, extra, { reopen: true, from: panel })
     if (!started) cardsNotice = t("Hyprflip is busy; try again in a moment.")
     return started
   }
@@ -221,7 +230,7 @@ Scope {
     if (!flipConnection.canCreate) { builderNotice = flipConnection.unavailableText || t("The card could not be made."); return }
     builderNotice = ""
     var started = flipConnection.run("create", Builder.request(draft), {
-      workspace: draft.workspace, replace: draft.mode === "edit" ? draft.card : null, reopen: true })
+      workspace: draft.workspace, replace: draft.mode === "edit" ? draft.card : null, reopen: true, from: panel })
     if (!started) builderNotice = t("Hyprflip is busy; try again in a moment.")
   }
 
@@ -239,8 +248,10 @@ Scope {
 
   function flipFinished(action, ok, message, pending) {
     var reopen = pending && pending.options && pending.options.reopen
+    // The panel the action came from comes back, even if another opened since.
+    var from = (pending && pending.options && pending.options.from) || panel
     var ws = flipConnection.sent && flipConnection.sent.context ? flipConnection.sent.context.workspace : 0
-    if (reopen && panel && (!ws || ws === focusedWorkspace)) panel.reveal()
+    if (reopen && from && (!ws || ws === focusedWorkspace)) from.reveal()
     if (action === "create" && draft) {
       if (ok) {
         cardsNotice = draft.mode === "edit" ? t("Changes saved.") : t("Card created.")
@@ -261,7 +272,7 @@ Scope {
     t: function(text, args) { return root.t(text, args) }
     binDir: root.binDir
     lang: root.lang
-    owner: root.panel
+    owner: root
     watching: root.watching
     onFinished: function(action, ok, message, pending) { root.flipFinished(action, ok, message, pending) }
   }

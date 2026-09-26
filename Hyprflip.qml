@@ -17,7 +17,7 @@ Scope {
   property var t: function(text, args) { return text }
   property string binDir: ""
   property string lang: "en"
-  property var owner: null          // the panel: closed for a handoff
+  property var owner: null          // its dismiss() closes the panels for a handoff
   property bool watching: false     // refresh on Hyprland events only while someone looks
 
   readonly property string helper: Quickshell.env("SAVE_THEM_ALL_HYPRFLIP_HELPER")
@@ -84,6 +84,7 @@ Scope {
   //   card       {kind, id, faces}: the card acted on, checked against a fresh snapshot
   //   replace    the same, for a create that rebuilds a card
   //   reopen     the caller wants the panel back when it ends
+  //   from       the panel that asked (Service.qml shows it again)
   function run(action, extra, options) {
     // operationProcess.running without busy: a helper the watchdog gave up
     // on has not died yet; starting another now would only queue it.

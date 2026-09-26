@@ -126,6 +126,27 @@ ShellRoot {
       { run: function(c) { service.finishPick(false); service.cancelBuilder() } },
     ] },
 
+    // Two monitors, a panel on each: a handoff lets go of both.
+    { name: "multi-panel", steps: [
+      { sh: "printf done > run-mode" },
+      { run: function(c) {
+        panelA.opened = true
+        service.attach(panelA)
+        panelB.opened = true
+        service.attach(panelB)
+        c.a = panelA.dismissed
+        c.b = panelB.dismissed
+        c.br = panelB.revealed
+        c.started = service.setOption("duration", { duration_ms: 420 })
+      } },
+      { until: function(c) { return !flip.busy }, ms: 8000 },
+      { log: function(c) {
+        return { started: c.started, aDismissed: panelA.dismissed - c.a, bDismissed: panelB.dismissed - c.b,
+                 bRevealed: panelB.revealed - c.br, aOpened: panelA.opened, bOpened: panelB.opened }
+      } },
+      { run: function(c) { panelA.opened = true; service.attach(panelA) } },
+    ] },
+
     // The helper speaks Spanish; the panel in English says it in English.
     { name: "english", steps: [
       { run: function(c) { service.setLanguage("en") } },

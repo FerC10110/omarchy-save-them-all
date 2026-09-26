@@ -261,6 +261,12 @@ class ServiceTest(unittest.TestCase):
     def test_a_refresh_that_closes_nothing_leaves_the_pick_alone(self):
         self.assertEqual(self.result('prune-quiet'), {'picking': True, 'changes': 0})
 
+    def test_a_handoff_lets_go_of_every_open_panel(self):
+        r = self.result('multi-panel')
+        self.assertTrue(r['started'])
+        self.assertGreaterEqual(r['aDismissed'], 1)
+        self.assertGreaterEqual(r['bDismissed'], 1)
+
     def test_helper_messages_follow_the_language(self):
         r = self.result('english')
         self.assertEqual(r['error'], {'busy': False, 'failed': True, 'notice': 'Wait for the flip to finish and try again.'})
