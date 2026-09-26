@@ -72,6 +72,7 @@ var STRINGS = {
     "＋ drop here": "＋ soltá acá",
     "Edit card": "Editar tarjeta",
     "New card": "Nueva tarjeta",
+    "Workspace %1 · 1 window": "Escritorio %1 · 1 ventana",
     "Workspace %1 · %2 windows": "Escritorio %1 · %2 ventanas",
     "Windows": "Ventanas",
     "Special workspaces": "Escritorios especiales",

@@ -106,7 +106,9 @@ Item {
       Text {
         Layout.fillWidth: true
         textFormat: Text.PlainText
-        text: page.draft ? host.t("Workspace %1 · %2 windows", [page.draft.workspace, page.count]) : ""
+        text: !page.draft ? ""
+          : page.count === 1 ? host.t("Workspace %1 · 1 window", [page.draft.workspace])
+          : host.t("Workspace %1 · %2 windows", [page.draft.workspace, page.count])
         color: host.dim
         font.family: host.fontFamily
         font.pixelSize: Style.font.caption
