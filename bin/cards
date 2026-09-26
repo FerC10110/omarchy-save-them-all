@@ -144,6 +144,15 @@ def active_workspace():
     return hypr_json('-j', 'activeworkspace')['id']
 
 
+def border_size():
+    """Hyprland's window border, in pixels; 0 when it cannot be read."""
+    try:
+        size = hypr_json('-j', 'getoption', 'general:border_size').get('int')
+    except (HyprError, AttributeError):
+        return 0
+    return size if type(size) is int and size > 0 else 0
+
+
 def dispatch(expression):
     hyprctl('dispatch', expression)
 
@@ -581,6 +590,11 @@ def capture(args):
         floating = None
         if card.get('floating'):
             x, y, w, h = (int(round(v)) for v in (list(card.get('box') or []) + [0, 0, 0, 0])[:4])
+            if card.get('kind') != 'pair':
+                # A container's box includes the border; the saved place is
+                # the window's, which is what the helper puts back.
+                b = border_size()
+                x, y, w, h = x + b, y + b, w - 2 * b, h - 2 * b
             floating = {'at': [x, y], 'size': [max(1, w), max(1, h)]}
         cards.append({'name': names.get(str(card.get('id')), ''), 'faces': faces,
                       'visible': 1 if card.get('active') == 1 else 0, 'floating': floating})

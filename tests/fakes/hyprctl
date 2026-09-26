@@ -120,6 +120,8 @@ if command == 'plugin list':
 if command == 'version':
     v = state.get('version', '0.56.2')
     answer({'tag': 'v' + v, 'version': v})
+if command == 'getoption general:border_size':
+    answer({'option': 'general:border_size', 'int': state.get('border_size', 0), 'set': True})
 if command == 'configerrors':
     print(state.get('configerrors', ''))
     sys.exit(0)

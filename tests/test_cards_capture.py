@@ -109,6 +109,24 @@ class CaptureTest(ScriptTest):
         self.assertEqual((out['cards'][0]['visible'], out['cards'][0]['floating']),
                          (1, {'at': [100, 120], 'size': [800, 600]}))
 
+    def test_a_floating_card_is_saved_without_its_border(self):
+        # Hyprflip's box is the window plus its border; restoring puts the
+        # saved place on the window itself, so the border must come off or
+        # the card grows by twice the border on every save and restore.
+        card = container(1, [['0x2'], ['0x3']], floating=True, box=(98, 118, 804, 604))
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip([card]), border_size=2,
+                        clients=[client('0x2', 'a'), client('0x3', 'b')])
+        out = self.cards_json('capture', '--workspace', '3', '--addresses', json.dumps(['0x2', '0x3']))
+        self.assertEqual(out['cards'][0]['floating'], {'at': [100, 120], 'size': [800, 600]})
+
+    def test_a_floating_native_pair_keeps_its_window_place_with_a_border(self):
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(pairs=[pair(4, '0x2', '0x3')]), border_size=2,
+                        clients=[client('0x2', 'a', at=(100, 120), size=(800, 600), floating=True,
+                                        grouped=['0x2', '0x3']),
+                                 client('0x3', 'b', floating=True, hidden=True, grouped=['0x2', '0x3'])])
+        out = self.cards_json('capture', '--workspace', '3', '--addresses', json.dumps(['0x2', '0x3']))
+        self.assertEqual(out['cards'][0]['floating'], {'at': [100, 120], 'size': [800, 600]})
+
     def test_five_windows_on_a_side(self):
         back = ['0x3', '0x4', '0x5', '0x6', '0x7']
         out = self.capture([container(1, [['0x2'], back])], ['0x2'] + back,
