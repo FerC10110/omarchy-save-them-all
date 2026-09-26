@@ -6,7 +6,6 @@ import "I18n.js" as I18n
 import "AppNames.js" as AppNames
 import "Builder.js" as Builder
 import "Pick.js" as Pick
-import "Protocol.js" as Protocol
 import "CardsModel.js" as CardsModel
 
 // Loaded once by the shell (kind "service"). It owns what outlives the
@@ -66,8 +65,11 @@ Scope {
   readonly property bool thumbnails: panelOpen
   property var draft: null          // the card builder's, kept while the panel closes
   property string builderNotice: ""
-  property var namedFaces: null     // a card just made, waiting for its name
-  property string pendingName: ""
+  // A card just made, waiting for its name: { faces, name, until }. It
+  // applies once, to the card that create made, and only for nameTimeout
+  // ms: a card with the same windows later on was made some other way.
+  property var pendingName: null
+  property int nameTimeout: 15000
   property var pickDraft: null      // the overlay's copy of the draft
   property int pickFace: 0
   property string pickNotice: ""    // builderNotice from before the pick, restored on Esc
@@ -258,6 +260,7 @@ Scope {
     if (flipConnection.busy) { builderNotice = t("Hyprflip is busy; try again in a moment."); return }
     if (!flipConnection.canCreate) { builderNotice = flipConnection.unavailableText || t("The card could not be made."); return }
     builderNotice = ""
+    pendingName = null
     var started = flipConnection.run("create", Builder.request(draft), {
       workspace: draft.workspace, replace: draft.mode === "edit" ? draft.card : null, reopen: true, from: panel })
     if (!started) builderNotice = t("Hyprflip is busy; try again in a moment.")
@@ -294,8 +297,7 @@ Scope {
       if (ok) {
         cardsNotice = draft.mode === "edit" ? t("Changes saved.") : t("Card created.")
         cardsFailed = false
-        namedFaces = draft.faces
-        pendingName = draft.name
+        pendingName = { faces: draft.faces, name: draft.name, until: Date.now() + nameTimeout }
         draft = null
         builderNotice = ""
         if (panel) panel.openHome()
@@ -319,17 +321,17 @@ Scope {
     onFinished: function(action, ok, message, pending) { root.flipFinished(action, ok, message, pending) }
   }
 
-  // A new card gets its name once Hyprflip lists it.
+  // A new card gets its name once Hyprflip lists it, if that is soon.
   Connections {
     target: flipConnection
     function onSnapshotChanged() {
-      if (!root.namedFaces) return
-      var made = (flipConnection.snapshot.cards || []).find(function(c) {
-        return Protocol.sameFaces(Protocol.faceAddresses(c), root.namedFaces)
-      })
+      var waiting = root.pendingName
+      if (!waiting) return
+      if (Date.now() > waiting.until) { root.pendingName = null; return }
+      var made = CardsModel.namedCard(flipConnection.snapshot.cards, waiting, Date.now())
       if (!made) return
-      root.setName(made.id, root.pendingName)
-      root.namedFaces = null
+      root.pendingName = null
+      root.setName(made.id, waiting.name)
     }
   }
 

@@ -69,3 +69,17 @@ test("hints list every key, off where it cannot act", () => {
   assert.deepEqual(CardsModel.hints(CardsModel.allowed(pair, {}, true, true), t).map(h => [h.text, h.on]),
     [["v flip", true], ["e edit", true], ["d dismantle", true], ["u unfold", false], ["t float", false], ["n new", true]])
 })
+
+test("namedCard: the card a create just made, while the name still waits for it", () => {
+  const made = card(7, 3, [["0x1"], ["0x2", "0x3"]])
+  const other = card(8, 3, [["0x4"], ["0x5"]])
+  const waiting = { faces: [["0x1"], ["0x2", "0x3"]], name: "Work", until: 1000 }
+  assert.equal(CardsModel.namedCard([other, made], waiting, 500), made)
+  // Not listed (yet): nothing to name.
+  assert.equal(CardsModel.namedCard([other], waiting, 500), null)
+  // Same windows in another order is another card.
+  assert.equal(CardsModel.namedCard([card(9, 3, [["0x1"], ["0x3", "0x2"]])], waiting, 500), null)
+  // Too late: whatever card has those windows now was not made by that create.
+  assert.equal(CardsModel.namedCard([made], waiting, 1001), null)
+  assert.equal(CardsModel.namedCard([made], null, 0), null)
+})

@@ -59,6 +59,16 @@ function reference(card) {
            faces: card.faces.map(function(f) { return f.panes.map(function(p) { return p.address }) }) }
 }
 
+// The card a create just made, for the name given in the builder:
+// waiting = { faces, name, until } (until: a Date.now() deadline). Only the
+// first snapshots after that create count: later, a card with the same
+// windows was made some other way and keeps its own name.
+function namedCard(cards, waiting, now) {
+  if (!waiting || now > waiting.until) return null
+  var want = JSON.stringify(waiting.faces)
+  return (cards || []).find(function(c) { return JSON.stringify(reference(c).faces) === want }) || null
+}
+
 // What the Cards tab's keys (and buttons) can do to card now. The helper
 // only unfolds a container (a native pair has nothing to unfold), and
 // floating needs Hyprflip's floating cards; canCreate and canUnpair are
@@ -80,5 +90,6 @@ function hints(can, t) {
 
 if (typeof module !== "undefined") {
   module.exports = { faceNames: faceNames, title: title, groups: groups, flat: flat, step: step,
-                     modeText: modeText, sideText: sideText, reference: reference, allowed: allowed, hints: hints }
+                     modeText: modeText, sideText: sideText, reference: reference, namedCard: namedCard,
+                     allowed: allowed, hints: hints }
 }

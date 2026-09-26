@@ -338,3 +338,10 @@ class ServiceTest(unittest.TestCase):
         r = self.result('ungroup')
         self.assertEqual(r['ok'], {'notice': 'Every window on this workspace is out of its group.', 'failed': False})
         self.assertEqual(r['failed'], {'notice': 'Algunas ventanas siguen en un grupo; probá de nuevo', 'failed': True})
+
+    def test_a_new_card_gets_its_name_once_and_only_soon(self):
+        r = self.result('names')
+        self.assertEqual(r['made'], ['--id 2 --name Work'])
+        # The second create's card never showed up in time; when the same
+        # windows became a card later, it did not get "Late".
+        self.assertEqual(r['late'], ['--id 2 --name Work'])

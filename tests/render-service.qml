@@ -308,6 +308,46 @@ ShellRoot {
       { sh: "rm -f ungroup-fails" },
       { log: function(c) { return { ok: c.ok, failed: c.failed } } },
     ] },
+
+    // A new card gets the builder's name once, and only soon after.
+    { name: "names", steps: [
+      { sh: "printf done > run-mode; : > names.log" },
+      { run: function(c) {
+        service.startBuilder(null)
+        service.place("0x1", 0, -1)
+        service.place("0x2", 1, -1)
+        service.setDraftName("Work")
+        service.submitDraft()
+      } },
+      { until: function(c) { return !flip.busy && service.draft === null }, ms: 8000 },
+      { until: function(c) { return harness.card(2) !== null }, ms: 5000 },
+      { sleep: 500 },
+      { read: "names.log", into: "made" },
+      { sh: "printf done-no-card > run-mode" },
+      { run: function(c) {
+        service.nameTimeout = 300
+        service.startBuilder(null)
+        service.place("0x3", 0, -1)
+        service.place("0x4", 1, -1)
+        service.setDraftName("Late")
+        service.submitDraft()
+      } },
+      { until: function(c) { return !flip.busy && service.draft === null }, ms: 8000 },
+      { sleep: 800 },
+      // The same windows become a card much later, some other way.
+      { sh: "python3 -c \"import json; c = json.load(open('cards.json')); " +
+            "c.append({'id': 9, 'kind': 'container', 'key': 'container:9', 'token': 't9', 'current': '0x3', " +
+            "'active': 0, 'unfolded': False, 'floating': False, 'workspace': 3, 'name': '', " +
+            "'faces': [{'index': 0, 'axis': 'horizontal', 'panes': [{'address': '0x3', 'label': 'c'}]}, " +
+            "{'index': 1, 'axis': 'horizontal', 'panes': [{'address': '0x4', 'label': 'd'}]}]}); " +
+            "json.dump(c, open('cards.json', 'w'))\"; printf done > run-mode" },
+      { run: function(c) { flip.refresh() } },
+      { until: function(c) { return harness.card(9) !== null }, ms: 5000 },
+      { sleep: 500 },
+      { read: "names.log", into: "late" },
+      { run: function(c) { service.nameTimeout = 15000 } },
+      { log: function(c) { return { made: harness.lines(c.made), late: harness.lines(c.late), notice: service.cardsNotice } } },
+    ] },
   ]
 
   property int scenario: -1
