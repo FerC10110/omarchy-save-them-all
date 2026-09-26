@@ -16,6 +16,10 @@ var EXACT = {
   "Apariencia actualizada para todas las tarjetas.": "Appearance updated for every card.",
   "Espaciado entre apps actualizado para todas las tarjetas.": "Space between apps updated for every card.",
   "Cancelado. Las apps ya abiertas no se cierran.": "Cancelled. Apps that are already open stay open.",
+  // It worked, but the windows could not go back where they were.
+  "Tarjeta creada, pero no se pudo colocar donde estaba. Muévela a mano.": "Card created, but it could not go back where it was. Move it by hand.",
+  "Tarjeta editada, pero no se pudo colocar donde estaba. Muévela a mano.": "Card edited, but it could not go back where it was. Move it by hand.",
+  "Tarjeta desarmada. Sus apps siguen abiertas, pero no se pudieron colocar donde estaban.": "Card taken apart. Its apps stay open, but they could not go back where they were.",
   // Go to the workspace; the card or the focus changed underneath.
   "Ve al espacio de trabajo de esta tarjeta antes de editarla.": "Go to this card's workspace before changing it.",
   "La tarjeta cambió. Actualiza Tarjetas antes de editarla.": "The card changed. Refresh the list before changing it.",
@@ -26,6 +30,7 @@ var EXACT = {
   "La app original se cerró o se movió. Vuelve a abrir Tarjetas.": "The app that was in focus closed or moved. Try again.",
   "Vuelve a abrir Tarjetas para elegir un destino.": "Try again to choose where.",
   "Elige primero una tarjeta.": "Choose a card first.",
+  "Esa acción ya no está disponible. Vuelve a abrir Tarjetas.": "That action is no longer available. Try again.",
   // Busy or animating.
   "Espera a que termine el giro e inténtalo de nuevo.": "Wait for the flip to finish and try again.",
   "El giro no ha terminado. Vuelve a la tarjeta.": "The flip has not finished. Go back to the card.",
@@ -146,11 +151,18 @@ function english(message) {
   return text
 }
 
+// Whether a success message (the helper's, in either language) says the
+// windows could not go back where they were: the panel shows it instead of
+// its own plain success, so the warning reaches the user.
+function unplaced(message) {
+  return /no se pud(?:o|ieron) colocar|could not go back where/.test(String(message === undefined || message === null ? "" : message))
+}
+
 // What the panel shows of a helper message in its language.
 function forLang(message, lang) {
   return lang === "en" ? english(message) : String(message === undefined || message === null ? "" : message)
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { EXACT: EXACT, english: english, forLang: forLang }
+  module.exports = { EXACT: EXACT, english: english, forLang: forLang, unplaced: unplaced }
 }

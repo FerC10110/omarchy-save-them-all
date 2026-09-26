@@ -370,6 +370,26 @@ ShellRoot {
     ] },
 
     // A new card gets the builder's name once, and only soon after.
+    // A create or unpair that worked, but whose windows could not go back
+    // where they were: the helper's warning is shown, not a plain success.
+    { name: "unplaced", steps: [
+      { sh: "printf 'say:Tarjeta creada, pero no se pudo colocar donde estaba. Muévela a mano.' > run-mode" },
+      { run: function(c) {
+        service.startBuilder(null)
+        service.place("0x3", 0, -1)
+        service.place("0x4", 1, -1)
+        service.submitDraft()
+      } },
+      { until: function(c) { return !flip.busy && service.draft === null }, ms: 8000 },
+      { run: function(c) { c.create = { notice: service.cardsNotice, failed: service.cardsFailed } } },
+      { sh: "printf 'say:Tarjeta desarmada. Sus apps siguen abiertas, pero no se pudieron colocar donde estaban.' > run-mode" },
+      { run: function(c) { service.cardAction("unpair", harness.card(1)) } },
+      { until: function(c) { return !flip.busy }, ms: 8000 },
+      { run: function(c) { c.unpair = { notice: service.cardsNotice, failed: service.cardsFailed } } },
+      { sh: "printf done > run-mode" },
+      { log: function(c) { return { create: c.create, unpair: c.unpair } } },
+    ] },
+
     { name: "names", steps: [
       { sh: "printf done > run-mode; : > names.log" },
       { run: function(c) {

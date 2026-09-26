@@ -27,6 +27,28 @@ test("the common refusals come back in English", () => {
     "This only works on a card made of several apps.")
 })
 
+test("a stale action and the partial successes come back in English", () => {
+  assert.equal(HelperText.english("Esa acción ya no está disponible. Vuelve a abrir Tarjetas."),
+    "That action is no longer available. Try again.")
+  assert.equal(HelperText.english("Tarjeta creada, pero no se pudo colocar donde estaba. Muévela a mano."),
+    "Card created, but it could not go back where it was. Move it by hand.")
+  assert.equal(HelperText.english("Tarjeta editada, pero no se pudo colocar donde estaba. Muévela a mano."),
+    "Card edited, but it could not go back where it was. Move it by hand.")
+  assert.equal(HelperText.english("Tarjeta desarmada. Sus apps siguen abiertas, pero no se pudieron colocar donde estaban."),
+    "Card taken apart. Its apps stay open, but they could not go back where they were.")
+})
+
+test("unplaced tells a partial success from a plain one, in either language", () => {
+  for (const m of ["Tarjeta creada, pero no se pudo colocar donde estaba. Muévela a mano.",
+                   "Tarjeta desarmada. Sus apps siguen abiertas, pero no se pudieron colocar donde estaban."]) {
+    assert.equal(HelperText.unplaced(m), true)
+    assert.equal(HelperText.unplaced(HelperText.english(m)), true)
+  }
+  assert.equal(HelperText.unplaced("Tarjeta creada."), false)
+  assert.equal(HelperText.unplaced("Card taken apart. Its apps stay open."), false)
+  assert.equal(HelperText.unplaced(undefined), false)
+})
+
 test("messages with values keep them", () => {
   assert.equal(HelperText.english("Cada cara necesita entre 1 y 5 apps."), "Each side needs between 1 and 5 apps.")
   assert.equal(HelperText.english("kitty no se puede usar: está en otra tarjeta o grupo, en pantalla completa, flotando o en un espacio de trabajo especial."),

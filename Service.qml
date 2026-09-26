@@ -7,6 +7,7 @@ import "AppNames.js" as AppNames
 import "Builder.js" as Builder
 import "Pick.js" as Pick
 import "CardsModel.js" as CardsModel
+import "HelperText.js" as HelperText
 
 // Loaded once by the shell (kind "service"). It owns what outlives the
 // panel: the language, the connection to Hyprflip, the list of windows and
@@ -322,7 +323,8 @@ Scope {
       optionFailed = !ok
     } else if (action === "create" && draft) {
       if (ok) {
-        cardsNotice = draft.mode === "edit" ? t("Changes saved.") : t("Card created.")
+        cardsNotice = HelperText.unplaced(message) ? message
+          : draft.mode === "edit" ? t("Changes saved.") : t("Card created.")
         cardsFailed = false
         pendingName = { faces: draft.faces, name: draft.name, until: Date.now() + nameTimeout }
         draft = null
@@ -334,7 +336,7 @@ Scope {
     } else if (action !== "create" || !ok) {
       // flip, unfold, floating, unpair; or a create whose builder is gone.
       cardsFailed = !ok
-      cardsNotice = ok && action === "unpair" ? t("Card taken apart; its windows stay open.") : message
+      cardsNotice = ok && action === "unpair" && !HelperText.unplaced(message) ? t("Card taken apart; its windows stay open.") : message
     }
   }
 

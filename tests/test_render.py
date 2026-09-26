@@ -324,6 +324,14 @@ class ServiceTest(unittest.TestCase):
         self.assertGreater(term - cancel, 800)
         self.assertGreater(r['gone'] - term, 1300)
 
+    def test_a_partial_success_shows_the_helpers_warning(self):
+        r = self.result('unplaced')
+        self.assertEqual(r['create'], {'notice': 'Card created, but it could not go back where it was. Move it by hand.',
+                                       'failed': False})
+        self.assertEqual(r['unpair'], {
+            'notice': 'Card taken apart. Its apps stay open, but they could not go back where they were.',
+            'failed': False})
+
     def test_a_hung_snapshot_is_stopped(self):
         r = self.result('watchdog-snapshot')
         self.assertTrue(r['started'])
