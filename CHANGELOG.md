@@ -7,8 +7,9 @@
 - A Hyprflip helper that hangs, or cannot start, no longer leaves the panel
   busy until the shell reloads: the action is stopped after a while, and says
   so.
-- Editing a card keeps the proportions of a side that did not change, once
-  the Hyprflip helper lists them; changing only its name just renames it.
+- Editing a card keeps the proportions of a side that did not change (with a
+  Hyprflip helper that reports them; older ones start the sides equal, as
+  before); changing only its name just renames it.
 - In English, the Hyprflip helper's messages (it speaks Spanish only) show in
   English.
 - With a panel on each monitor, handing the focus to Hyprflip closes all of

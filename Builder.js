@@ -19,9 +19,9 @@ function newDraft(workspace) {
            visible: 0, floating: null, name: "", cursor: "" }
 }
 
-// A side's ratios as a snapshot face lists them, or null when it does not
-// (the helper's snapshot does not carry them yet) or they are not usable:
-// one number in (0, 1] per window.
+// A side's ratios as a snapshot face lists them (Hyprflip's helper does
+// since its commit e0b985f), or null when it does not (an older helper) or
+// they are not usable: one number in (0, 1] per window.
 function faceRatios(face) {
   var r = face.ratios
   if (!Array.isArray(r) || r.length !== face.panes.length) return null

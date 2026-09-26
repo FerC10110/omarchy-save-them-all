@@ -217,7 +217,7 @@ test("request keeps a side's ratios while its windows and their order stay", () 
   // Nothing kept at all: null, the helper's "start equal".
   d = Builder.place(d, "0x9", 0, -1, t).draft
   assert.equal(Builder.request(d).ratios, null)
-  // A snapshot without ratios (today's helper), or with bad ones: null.
+  // A snapshot without ratios (a helper before e0b985f), or with bad ones: null.
   assert.equal(Builder.request(Builder.editDraft(CARD, "", null)).ratios, null)
   const bad = Object.assign({}, RATIOS, { faces: [Object.assign({}, RATIOS.faces[0], { ratios: [0] }),
                                                    Object.assign({}, RATIOS.faces[1], { ratios: [1] })] })
