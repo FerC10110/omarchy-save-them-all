@@ -101,10 +101,12 @@ clients_on_ws() {
 
 # Chromium's browser window is "chromium" when a launcher starts it and
 # "chromium-browser" when it is started some other ways; both are the same app.
+# Windows sharing a place (a card's) are ordered the way save-them-all saved
+# them: the shown one first.
 addresses_of() { # $1 class -> addresses sorted by position
   clients_on_ws | jq -r --arg c "$1" '
     def family: if . == "chromium-browser" then "chromium" else . end;
-    [.[] | select((.class // "" | family) == ($c | family))] | sort_by(.at[0], .at[1]) | .[].address'
+    [.[] | select((.class // "" | family) == ($c | family))] | sort_by(.at[0], .at[1], (.hidden // false)) | .[].address'
 }
 
 # The state file is meant to be edited by hand, so nothing read from it is

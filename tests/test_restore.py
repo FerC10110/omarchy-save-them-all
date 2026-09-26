@@ -81,6 +81,26 @@ class RestoreCardsTest(ScriptTest):
                    and not x.startswith('hl.dsp.focus(')]   # giving focus back is fine; moving/resizing is not
         self.assertEqual(touched, [])
 
+    def test_two_windows_of_one_class_in_a_card_do_not_swap(self):
+        # Both kitties of the card share its place; Hyprland lists windows in
+        # an order that changes (focus raises a floating one). Between two
+        # windows at one place the shown one comes first, on saving and on
+        # restoring, so the card is found as it is and left alone.
+        kitty = lambda a, **kw: client(a, 'kitty', at=(960, 0), size=(960, 1080), tags=['terminal'], **kw)
+        live = [client('0x1', 'foot', at=(0, 0), size=(960, 1080), tags=['terminal']),
+                kitty('0x2', grouped=['0x2', '0x3']), kitty('0x3', hidden=True, grouped=['0x2', '0x3'])]
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip([__import__('scripttest').container(
+            1, [['0x2'], ['0x3']], box=(960, 0, 960, 1080))]), clients=live)
+        self.assertEqual(self.run_script('save-them-all', '--quiet').returncode, 0)
+        state = self.hypr()
+        state['clients'] = [live[0], live[2], live[1]]   # 0x3 is listed before 0x2 now
+        self.hypr_state(**state)
+        r = self.run_script('restore-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.helper_requests(), [])
+        self.assertIn('cards: 0 built, 1 already there', r.stdout)
+        self.assertEqual(self.notifications()[-1][0], 'Windows restored on workspace 3')
+
     def test_restore_with_invalid_cards_still_restores_windows(self):
         self.fresh_session(cards=[{'faces': 'bad'}])
         r = self.run_script('restore-them-all')

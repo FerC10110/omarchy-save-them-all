@@ -215,11 +215,13 @@ if [[ $flip != true && $members != '[]' ]]; then
 fi
 
 # Order = left to right, top to bottom: this is what reproduces the dwindle tree.
+# A card's windows share one place: there the shown one comes first, the same
+# tie-break restore-them-all makes, since Hyprland's own listing order changes.
 clients=$(hyprctl -j clients | jq -c --argjson ws "$ws" --arg ex "$EXCLUDE_CLASSES" --argjson members "$members" '
   [.[] | select(.workspace.id == $ws and .mapped
                 and (((.hidden // false) | not) or (.address as $a | $members | index($a) != null))
                 and ((.class // "") | test($ex) | not))]
-  | sort_by(.at[0], .at[1]) | .[]')
+  | sort_by(.at[0], .at[1], (.hidden // false)) | .[]')
 
 entries='[]'
 addresses='[]'
