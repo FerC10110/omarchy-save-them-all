@@ -36,6 +36,13 @@ Item {
     if (service && service.picking && Pick.pinChanged(root.pin, pinnedWorkspaceId)) service.finishPick(false)
   }
 
+  // The pinned monitor was unplugged while picking: there is nothing left to
+  // pick from on it, so cancel the same way (the builder keeps its draft).
+  readonly property var monitorNames: (Hyprland.monitors ? Hyprland.monitors.values : []).map(function(m) { return m ? m.name : "" })
+  onMonitorNamesChanged: {
+    if (service && service.picking && Pick.monitorGone(root.pin, monitorNames)) service.finishPick(false)
+  }
+
   // Only startPick() opens this for real: it sets pickDraft, then summons.
   // Anything else that reaches this plugin id now that it also carries kind
   // "overlay" — an external summon/toggle aimed at the id, e.g. a keybind

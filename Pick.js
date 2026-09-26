@@ -45,6 +45,16 @@ function pinChanged(pin, activeWorkspace) {
   return !!pin && activeWorkspace >= 0 && activeWorkspace !== pin.workspace
 }
 
+// True once the pinned monitor is gone from Hyprland's monitor list
+// (names): unplugged mid-pick. pinChanged() cannot see that, since a missing
+// monitor reads as "no reading" (-1) there. An empty list is no reading
+// either, and a pin without a name has nothing to lose.
+function monitorGone(pin, names) {
+  if (!pin || !pin.name || !names || names.length === 0) return false
+  return names.indexOf(pin.name) < 0
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { rects: rects, hit: hit, toggle: toggle, faceOfPick: faceOfPick, pinChanged: pinChanged }
+  module.exports = { rects: rects, hit: hit, toggle: toggle, faceOfPick: faceOfPick, pinChanged: pinChanged,
+                     monitorGone: monitorGone }
 }

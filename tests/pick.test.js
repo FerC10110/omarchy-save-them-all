@@ -42,3 +42,15 @@ test("pinChanged: true once the pinned monitor's workspace has moved on", () => 
   assert.equal(Pick.pinChanged(pin, -1), false)
   assert.equal(Pick.pinChanged(null, 5), false)
 })
+
+test("monitorGone: true once the pinned monitor leaves a monitor list that has been read", () => {
+  const pin = { name: "DP-1", x: 0, y: 0, workspace: 3 }
+  assert.equal(Pick.monitorGone(pin, ["DP-1", "HDMI-A-1"]), false)
+  // Unplugged mid-pick: the others are still listed, it is not.
+  assert.equal(Pick.monitorGone(pin, ["HDMI-A-1"]), true)
+  // No list yet (or none at all) is no reading, not a removal.
+  assert.equal(Pick.monitorGone(pin, []), false)
+  // Nothing pinned, or a pin without a name (no focused monitor at open()).
+  assert.equal(Pick.monitorGone(null, ["HDMI-A-1"]), false)
+  assert.equal(Pick.monitorGone({ name: "", workspace: 3 }, ["HDMI-A-1"]), false)
+})
