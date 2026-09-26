@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """cards: Save Them All's side of Hyprflip cards.
 
-    cards status   [--workspace N]               can Hyprflip be used; if not, why and how to fix it
+    cards status   [--workspace N [--previous F]] can Hyprflip be used; if not, why and how to fix it
     cards members  --workspace N [--previous F]  hidden windows of the workspace's cards, to save too
     cards capture  --workspace N --addresses A   the workspace's cards, as indices into the saved windows
     cards preserve --previous F --windows W      the previous save's cards, moved onto the windows saved now
@@ -265,8 +265,10 @@ def built_for():
 @command('status')
 def status(args):
     """With --workspace (a save), a workspace where Hyprflip shows no card
-    is answered without asking the helper: saving it needs Hyprflip's own
-    status only, and the helper can take up to 15 s to answer."""
+    and whose previous save (--previous) has none either is answered
+    without asking the helper: saving it needs Hyprflip's own status only,
+    and the helper can take up to 15 s to answer. Cards saved before still
+    ask it, so an unusable helper keeps them from that file, as always."""
     ws = workspace_arg(args) if args.workspace is not None else None
     report = {'available': False, 'reason': '', 'hyprland': '', 'built_for': built_for(),
               'hyprflip': '', 'create_faces': False, 'detail': '', 'fix': ''}
@@ -298,6 +300,11 @@ def status(args):
                     if now.get(c.get('current'), {}).get('workspace', {}).get('id') == ws]
         except HyprError:
             here = None   # unknown: ask the helper, as without --workspace
+        if here == [] and args.previous:
+            path = Path(args.previous)
+            _, saved, problem = read_file(path)
+            if saved or (problem and path.exists()):
+                here = None   # something saved before to keep: ask the helper
         if here == []:
             report.update(available=True, reason='ok', helper_checked=False)   # no card here to save
             return report

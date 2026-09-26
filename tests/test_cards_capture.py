@@ -339,6 +339,14 @@ class StatusForASaveTest(ScriptTest):
         s = self.cards_json('status', '--workspace', '3')
         self.assertEqual((s['available'], s['reason'], s['helper_checked']), (True, 'ok', False))
         self.assertEqual(self.helper_snapshots(), 0)
+        previous = self.write_saved(3, [saved_window('a', (0, 0), (1, 1), None), saved_window('b', (1, 0), (1, 1), None)],
+                                    cards=[{'faces': [{'windows': [0]}, {'windows': [1]}]}])
+        s = self.cards_json('status', '--workspace', '3', '--previous', str(previous))
+        self.assertEqual((s['available'], s['reason']), (False, 'helper'))   # saved cards: ask
+        self.write_saved(3, [saved_window('a', (0, 0), (1, 1), None)])
+        s = self.cards_json('status', '--workspace', '3', '--previous', str(previous))
+        self.assertEqual((s['available'], s['helper_checked']), (True, False))
+        self.assertEqual(self.helper_snapshots(), 1)
         s = self.cards_json('status', '--workspace', '4')
         self.assertEqual((s['available'], s['reason']), (False, 'helper'))
         self.assertEqual(self.cards_json('status')['reason'], 'helper')

@@ -201,6 +201,25 @@ class SaveCardsTest(ScriptTest):
         self.assertEqual([w['class'] for w in self.saved(3)['windows']], ['kitty'])
         self.assertNotIn('cards', self.saved(3))
 
+    def test_no_live_card_but_cards_saved_before_still_checks_the_helper(self):
+        # The helper is unusable and no Hyprflip card lives here (restore fell
+        # back to plain windows), but the previous save had a card: it is kept
+        # from that file as before, not dropped in silence by an empty capture.
+        windows = [saved_window('org.gnome.Calculator', (0, 0), (960, 1080), CALC),
+                   saved_window('obsidian', (960, 0), (960, 1080), OBSIDIAN)]
+        card = {'name': '', 'faces': [{'windows': [0], 'axis': 'row', 'ratios': [1.0]},
+                                      {'windows': [1], 'axis': 'row', 'ratios': [1.0]}],
+                'visible': 0, 'floating': None}
+        self.write_saved(3, windows, cards=[card])
+        self.helper_config(available=False, error='boom')
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(), clients=[
+            client('0x2', 'org.gnome.Calculator', at=(0, 0), size=(960, 1080)),
+            client('0x3', 'obsidian', at=(960, 0), size=(960, 1080))])
+        r = self.run_script('save-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.helper_snapshots(), 1)
+        self.assertEqual(self.saved(3)['cards'], [card])
+
     def test_saving_a_workspace_with_cards_still_checks_the_helper(self):
         self.with_card([container(7, [['0x2'], ['0x3', '0x4']])])
         self.assertEqual(self.run_script('save-them-all').returncode, 0)
