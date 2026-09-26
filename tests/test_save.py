@@ -83,6 +83,32 @@ class SaveCardsTest(ScriptTest):
         self.assertEqual([w['class'] for w in saved['windows']], ['kitty', 'org.gnome.Calculator', 'obsidian'])
         self.assertEqual(saved['cards'], [card])
 
+    def hidden_kitty_after_a_card_of(self, launch):
+        windows = [saved_window('org.gnome.Calculator', (0, 0), (960, 1080), CALC),
+                   saved_window('kitty', (0, 0), (960, 1080), launch)]
+        self.write_saved(3, windows, cards=[{'faces': [{'windows': [0]}, {'windows': [1]}]}])
+        self.hypr_state(clients=[   # no Hyprflip; the card is a native group
+            client('0x2', 'org.gnome.Calculator', size=(960, 1080), grouped=['0x2', '0x3']),
+            client('0x3', 'kitty', size=(960, 1080), hidden=True, grouped=['0x2', '0x3'], tags=['terminal'])])
+        r = self.run_script('save-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return [w['class'] for w in self.saved(3)['windows']]
+
+    def test_without_hyprflip_a_hidden_member_matches_class_and_launcher(self):
+        self.assertEqual(self.hidden_kitty_after_a_card_of(TERMINAL), ['org.gnome.Calculator', 'kitty'])
+        # The card's kitty ran tmux; this hidden one is a plain terminal.
+        self.assertEqual(self.hidden_kitty_after_a_card_of({'kind': 'terminal', 'session': 'tmux'}),
+                         ['org.gnome.Calculator'])
+
+    def test_without_hyprflip_or_a_previous_file_a_hidden_window_is_not_saved(self):
+        self.hypr_state(clients=[
+            client('0x2', 'org.gnome.Calculator', size=(960, 1080), grouped=['0x2', '0x3']),
+            client('0x3', 'obsidian', size=(960, 1080), hidden=True, grouped=['0x2', '0x3'])])
+        r = self.run_script('save-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual([w['class'] for w in self.saved(3)['windows']], ['org.gnome.Calculator'])
+        self.assertNotIn('cards', self.saved(3))
+
     def test_preserve_drops_cards_whose_windows_are_gone(self):
         windows = [saved_window('org.gnome.Calculator', (0, 0), (960, 1080), CALC),
                    saved_window('obsidian', (960, 0), (960, 1080), OBSIDIAN)]

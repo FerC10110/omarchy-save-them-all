@@ -205,6 +205,15 @@ else
   members=$("$BIN_DIR/cards" members --workspace "$ws" --previous "$out" 2>/dev/null) || members='[]'
 fi
 
+# Without Hyprflip, `cards members` matched those hidden windows by class;
+# their launcher must match too, when the previous save kept one: the card's
+# windows as they were saved, as [{class, launch, known}].
+card_keys=null
+if [[ $flip != true && $members != '[]' ]]; then
+  card_keys=$(jq -c '.windows as $w | [.cards[]?.faces[]?.windows[]? | $w[.]? | select(type == "object")
+    | {class, launch, known: has("launch")}]' "$out" 2>/dev/null) || card_keys=null
+fi
+
 # Order = left to right, top to bottom: this is what reproduces the dwindle tree.
 clients=$(hyprctl -j clients | jq -c --argjson ws "$ws" --arg ex "$EXCLUDE_CLASSES" --argjson members "$members" '
   [.[] | select(.workspace.id == $ws and .mapped
@@ -219,6 +228,11 @@ while IFS= read -r w; do
   [[ -n $w ]] || continue
   cls=$(jq -r .class <<<"$w")
   launch=$(launch_of "$w")
+  if [[ $card_keys != null && $(jq -r '.hidden // false' <<<"$w") == true ]] &&
+     ! jq -e --arg c "$cls" --argjson l "$launch" \
+       'any(.[]; .class == $c and ((.known | not) or .launch == $l))' <<<"$card_keys" >/dev/null; then
+    continue
+  fi
   [[ $launch != null ]] || echo "no desktop entry for $cls: restoring arranges it when open, but cannot reopen it" >&2
   entry=$(jq -c --argjson l "$launch" '{class, title: (.title // ""), launch: $l, at, size, floating}' <<<"$w")
   entries=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$entries")
