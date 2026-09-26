@@ -70,3 +70,16 @@ test("canCreate needs the same helper as bin/cards: create_faces and a container
   assert.equal(Protocol.canCreate(false, snap({ create_faces: true, containers: true })), false)
   assert.equal(Protocol.canCreate(true, Protocol.emptySnapshot()), false)
 })
+
+test("whyUnavailable: the status first, then an unreadable snapshot, then what the snapshot says", () => {
+  const ok = { available: true, reason: "ok" }
+  const snap = Object.assign(Protocol.emptySnapshot(), { available: true })
+  assert.equal(Protocol.whyUnavailable(ok, snap, "", en), "")
+  assert.equal(Protocol.whyUnavailable({ available: false, reason: "no-plugin", fix: "make" }, snap, "", en),
+    "Hyprflip is not loaded. Install it with: make")
+  assert.equal(Protocol.whyUnavailable(ok, snap, "unreadable", en), "The Hyprflip helper sent an unreadable answer.")
+  // A protocol 1 snapshot that says available: false carries the reason.
+  const down = Protocol.parseSnapshot(JSON.stringify({ protocol: 1, available: false, error: "Hyprland no responde." })).snapshot
+  assert.equal(Protocol.whyUnavailable(ok, down, "", en), "The Hyprflip helper reports: Hyprland no responde.")
+  assert.equal(Protocol.whyUnavailable(ok, Protocol.emptySnapshot(), "", en), "The Hyprflip helper reports: ?")
+})

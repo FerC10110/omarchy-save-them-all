@@ -40,6 +40,10 @@ var STEPS = [
   // premature "Cards need Hyprflip" — only "Checking Hyprflip…" (Fix round 1).
   { name: "cards-unsettled-es", page: "CardsTab.qml", lang: "es", patch: { settled: false, snapshot: {} } },
   { name: "cards-empty-en", page: "CardsTab.qml", lang: "en", patch: { emptyCards: true } },
+  // bin/cards status is fine but the helper's snapshot (protocol 1) says
+  // Hyprflip cannot be used right now: the Cards tab says what it reported.
+  { name: "cards-snapshot-unavailable-es", page: "CardsTab.qml", lang: "es",
+    patch: { snapshot: { protocol: 1, available: false, error: "Hyprland no responde." } } },
   // A native pair, and a Hyprflip without floating cards: u (the helper only
   // unfolds a container) and t do nothing, and their hints are greyed.
   { name: "cards-pair-keys-en", page: "CardsTab.qml", lang: "en",
@@ -53,6 +57,9 @@ var STEPS = [
     expect: { calls: [["cardAction", "flip", "pair:5"]] } },
   { name: "settings-en", page: "SettingsTab.qml", lang: "en", patch: {} },
   { name: "settings-es", page: "SettingsTab.qml", lang: "es", patch: {} },
+  // Status ok, first snapshot not back yet: "Checking Hyprflip…", no verdict,
+  // and none of Hyprflip's own rows.
+  { name: "settings-unsettled-es", page: "SettingsTab.qml", lang: "es", patch: { settled: false, snapshot: {} } },
   { name: "settings-unavailable-es", page: "SettingsTab.qml", lang: "es",
     patch: { status: { available: false, reason: "mismatch", hyprland: "0.57.0", built_for: "0.56.2", fix: "make" } } },
   // Hyprflip's duration is none of the presets (set by hand): a Custom row

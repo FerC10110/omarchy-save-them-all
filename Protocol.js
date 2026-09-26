@@ -95,8 +95,18 @@ function unavailableText(status, t) {
   }
 }
 
+// Why Hyprflip cannot be used right now, or "": what `bin/cards status`
+// says, else an unreadable snapshot (problem from parseSnapshot), else the
+// snapshot's own error. Hyprflip.qml's unavailableText.
+function whyUnavailable(status, snapshot, problem, t) {
+  if (!status || status.available !== true) return unavailableText(status, t)
+  if (problem) return t("The Hyprflip helper sent an unreadable answer.")
+  if (!snapshot || snapshot.available !== true) return t("The Hyprflip helper reports: %1", [(snapshot && snapshot.error) || "?"])
+  return ""
+}
+
 if (typeof module !== "undefined") {
   module.exports = { emptySnapshot: emptySnapshot, parseSnapshot: parseSnapshot, request: request, receive: receive,
                      faceAddresses: faceAddresses, sameFaces: sameFaces, cardTarget: cardTarget, canCreate: canCreate,
-                     unavailableText: unavailableText }
+                     unavailableText: unavailableText, whyUnavailable: whyUnavailable }
 }

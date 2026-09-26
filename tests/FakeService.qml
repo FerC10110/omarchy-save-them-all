@@ -40,7 +40,7 @@ QtObject {
     readonly property bool available: status.available === true && snapshot.available === true
     readonly property bool canCreate: Protocol.canCreate(available, snapshot)
     readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
-    readonly property string unavailableText: status.available === true ? "" : Protocol.unavailableText(status, t)
+    readonly property string unavailableText: Protocol.whyUnavailable(status, snapshot, "", t)
     property bool busy: false
     property string notice: ""
     property bool failed: false

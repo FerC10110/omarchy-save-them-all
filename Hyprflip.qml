@@ -36,12 +36,7 @@ Scope {
   readonly property bool settled: statusChecked && (status.available !== true || snapshotChecked)
   readonly property bool canCreate: Protocol.canCreate(available, snapshot)
   readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
-  readonly property string unavailableText: {
-    if (status.available !== true) return Protocol.unavailableText(status, t)
-    if (snapshotProblem !== "") return t("The Hyprflip helper sent an unreadable answer.")
-    if (snapshot.available !== true) return t("The Hyprflip helper reports: %1", [snapshot.error || "?"])
-    return ""
-  }
+  readonly property string unavailableText: Protocol.whyUnavailable(status, snapshot, snapshotProblem, t)
 
   property string notice: ""
   property bool failed: false

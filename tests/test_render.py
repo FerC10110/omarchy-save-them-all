@@ -96,6 +96,9 @@ class RenderTest(unittest.TestCase):
             'cards-es': ['v voltear', 'u desplegar', 'Mosaico', 'Frente: Calculator', 'Reverso: Obsidian', 'Voltear', 'Desarmar', 'Tarjeta creada.'],
             'cards-unavailable-es': ['Las tarjetas necesitan Hyprflip', 'El asistente de Hyprflip no está instalado'],
             'cards-unsettled-es': ['Revisando Hyprflip…'],
+            'cards-snapshot-unavailable-es': ['Las tarjetas necesitan Hyprflip',
+                                              'El asistente de Hyprflip dice: Hyprland no responde.'],
+            'settings-unsettled-es': ['Idioma', 'Revisando Hyprflip…'],
             'cards-empty-en': ['No cards yet. Press n to make one.'],
             'cards-pair-keys-en': ['v flip', 'u unfold', 't float', 'n new'],
             'settings-en': ['Language', 'Automatic', 'Classic tabs', 'Flip', 'Normal', 'Keyboard shortcuts',
@@ -137,6 +140,7 @@ class RenderTest(unittest.TestCase):
             'workspace-empty-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
             'workspace-unsettled-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
             'cards-unsettled-es': ['Las tarjetas necesitan Hyprflip'],
+            'settings-unsettled-es': ['Hyprflip no está disponible', 'Apariencia de la tarjeta', 'Velocidad'],
             'workspace-card-notice-es': ['Tarjeta creada.'],
             'builder-notice-es': ['1 ventanas'],
         }
