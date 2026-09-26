@@ -190,16 +190,9 @@ class ReadFileTest(ScriptTest):
                 path = self.write_saved(3, windows, cards=[card])
                 out = self.cards_json('layout', '--file', str(path), '--addresses', '["0x1", "0x2"]') \
                     if (BIN / 'cards').read_text().count("@command('layout')") else None
-                code = ("import importlib.machinery, importlib.util, json, sys\n"
-                        "loader = importlib.machinery.SourceFileLoader('cards', sys.argv[1])\n"
-                        "spec = importlib.util.spec_from_loader('cards', loader)\n"
-                        "cards = importlib.util.module_from_spec(spec)\n"
-                        "loader.exec_module(cards)\n"
-                        "w, c, p = cards.read_file(__import__('pathlib').Path(sys.argv[2]))\n"
-                        "print(json.dumps([len(w), c, p]))")
-                n, cards, problem = json.loads(subprocess.run(
-                    ['python3', '-c', code, str(BIN / 'cards'), str(path)], env=self.env,
-                    capture_output=True, text=True, check=True).stdout)
+                n, cards, problem = self.cards_python(
+                    "w, c, p = cards.read_file(__import__('pathlib').Path(sys.argv[2]))\n"
+                    'print(json.dumps([len(w), c, p]))', path)
                 self.assertEqual((n, cards), (2, []))
                 self.assertTrue(problem.startswith('card 1 '), problem)
                 if out is not None:
@@ -209,14 +202,8 @@ class ReadFileTest(ScriptTest):
         windows = [saved_window(c, (0, 0), (10, 10), None) for c in 'abc']
         path = self.write_saved(3, windows, cards=[{'faces': [{'windows': [0]}, {'windows': [1]}]},
                                                    {'faces': [{'windows': [2]}, {'windows': [1]}]}])
-        code = ("import importlib.machinery, importlib.util, json, sys\n"
-                "loader = importlib.machinery.SourceFileLoader('cards', sys.argv[1])\n"
-                "spec = importlib.util.spec_from_loader('cards', loader)\n"
-                "cards = importlib.util.module_from_spec(spec)\n"
-                "loader.exec_module(cards)\n"
-                "print(json.dumps(cards.read_file(__import__('pathlib').Path(sys.argv[2]))[1:]))")
-        cards, problem = json.loads(subprocess.run(['python3', '-c', code, str(BIN / 'cards'), str(path)],
-                                                   env=self.env, capture_output=True, text=True, check=True).stdout)
+        cards, problem = self.cards_python(
+            "print(json.dumps(cards.read_file(__import__('pathlib').Path(sys.argv[2]))[1:]))", path)
         self.assertEqual((cards, problem), ([], 'a window is in two cards'))
 
 
@@ -236,12 +223,6 @@ class NamesTest(ScriptTest):
                   "console.log(JSON.stringify(JSON.parse(process.argv[1]).map(c => A.resolve({class: c}, e).name)))")
         js = json.loads(subprocess.run(['node', '-e', script, json.dumps(classes)], cwd=ROOT,
                                        capture_output=True, text=True, check=True).stdout)
-        code = ("import importlib.machinery, importlib.util, json, sys\n"
-                "loader = importlib.machinery.SourceFileLoader('cards', sys.argv[1])\n"
-                "spec = importlib.util.spec_from_loader('cards', loader)\n"
-                "cards = importlib.util.module_from_spec(spec)\n"
-                "loader.exec_module(cards)\n"
-                "print(json.dumps([cards.app_name(c) for c in json.loads(sys.argv[2])]))")
-        py = json.loads(subprocess.run(['python3', '-c', code, str(BIN / 'cards'), json.dumps(classes)],
-                                       env=self.env, capture_output=True, text=True, check=True).stdout)
+        py = self.cards_python('print(json.dumps([cards.app_name(c) for c in json.loads(sys.argv[2])]))',
+                               json.dumps(classes))
         self.assertEqual(py, js)

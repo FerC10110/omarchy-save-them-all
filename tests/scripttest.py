@@ -154,3 +154,16 @@ class ScriptTest(unittest.TestCase):
         r = self.cards(*args, env=env)
         self.assertEqual(r.returncode, 0, r.stderr)
         return json.loads(r.stdout)
+
+    def cards_python(self, body, *args, env=None):
+        """Run `body` with bin/cards loaded as the module `cards` (its own
+        argv after the script path is `args`) and read what it prints as JSON:
+        for the functions no command prints on its own."""
+        code = ('import importlib.machinery, importlib.util, json, sys\n'
+                "loader = importlib.machinery.SourceFileLoader('cards', sys.argv[1])\n"
+                "spec = importlib.util.spec_from_loader('cards', loader)\n"
+                'cards = importlib.util.module_from_spec(spec)\n'
+                'loader.exec_module(cards)\n' + body)
+        return json.loads(subprocess.run(['python3', '-c', code, str(BIN / 'cards'), *map(str, args)],
+                                         env={**self.env, **(env or {})}, capture_output=True,
+                                         text=True, check=True, timeout=60).stdout)
