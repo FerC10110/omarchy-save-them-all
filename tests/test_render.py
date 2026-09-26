@@ -302,6 +302,14 @@ class ServiceTest(unittest.TestCase):
         self.assertLess(stopped['seconds'], 3)
         self.assertEqual(r['after'], {'busy': False, 'failed': False, 'notice': 'Animation updated for every card.'})
 
+    def test_a_retry_after_the_watchdog_is_not_killed(self):
+        r = self.result('watchdog-retry')
+        self.assertTrue(r['started'])
+        after = r['after']
+        self.assertEqual((after['busy'], after['failed'], after['notice']),
+                         (False, False, 'Animation updated for every card.'))
+        self.assertGreater(after['seconds'], 3.5)
+
     def test_a_hung_snapshot_is_stopped(self):
         r = self.result('watchdog-snapshot')
         self.assertTrue(r['started'])

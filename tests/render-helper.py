@@ -5,8 +5,10 @@ cards `snapshot` lists, and the harness steers it with files there:
   snapshot-hang   `snapshot` never answers
   snapshot-slow   `snapshot` answers after half a second
   run-mode        what `run` does: done (default), done-no-card, hang (and
-                  ignore SIGTERM), crash (stderr, exit 3), error:<message>,
-                  say:<message> (done with that message)
+                  ignore SIGTERM), hang-until-term (hang, but end on SIGTERM
+                  as control.py does: "cancelled", exit 0), crash (stderr,
+                  exit 3), error:<message>, say:<message> (done with that
+                  message), slow:<seconds> (done that long after the resume)
 Every run request is appended to requests.jsonl. Like the real helper, a run
 hands the focus off once and waits for {"resume": 1}; it messages in Spanish.
 The workspace is FAKE_HYPR_STATE's active_workspace (tests/fakes/hyprctl)."""
@@ -88,6 +90,13 @@ def run(request):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         time.sleep(120)
         return 0
+    if mode == 'hang-until-term':
+        def cancelled(*_):
+            send('cancelled', message='Cancelado. Las apps ya abiertas no se cierran.')
+            os._exit(0)
+        signal.signal(signal.SIGTERM, cancelled)
+        time.sleep(120)
+        return 0
     if mode == 'crash':
         sys.stderr.write('BOOM-MARKER the helper fell over\n')
         return 3
@@ -99,6 +108,8 @@ def run(request):
     if answer.get('resume') != 1:
         send('cancelled', message='Cancelado. Las apps ya abiertas no se cierran.')
         return 0
+    if mode.startswith('slow:'):
+        time.sleep(float(mode[len('slow:'):]))
     if mode.startswith('error:'):
         send('error', message=mode[len('error:'):])
         return 1

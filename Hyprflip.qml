@@ -228,7 +228,16 @@ Scope {
     operating = true
     watchdog.interval = operationTimeout
     watchdog.restart()
+    // Nothing still aimed at an earlier helper may reach this one.
+    stopTimers()
     operationProcess.running = true
+  }
+
+  // The timers that stop a helper which ignores its cancel: only for the
+  // helper they were started for, so they end with it.
+  function stopTimers() {
+    cancelTimer.stop()
+    killTimer.stop()
   }
 
   function write(value) {
@@ -310,7 +319,10 @@ Scope {
     onExited: function(exitCode) { root.stopped(exitCode) }
     // A command that cannot start never exits: running just drops back to
     // false (after exited() when it did run, so this finds it handled).
-    onRunningChanged: if (!running) Qt.callLater(function() { root.stopped(null) })
+    onRunningChanged: if (!running) {
+      root.stopTimers()
+      Qt.callLater(function() { root.stopped(null) })
+    }
   }
 
   // A helper that ignores the cancel is stopped; it is our own child process.

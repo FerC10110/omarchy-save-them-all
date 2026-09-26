@@ -235,6 +235,25 @@ ShellRoot {
       { log: function(c) { return { started: c.started, stopped: c.stopped, after: c.after } } },
     ] },
 
+    // The helper the watchdog stopped ends at once (as control.py does on
+    // SIGTERM) and the action is tried again right away: nothing aimed at the
+    // old helper may hit the new one, which runs on and ends well.
+    { name: "watchdog-retry", steps: [
+      { sh: "printf hang-until-term > run-mode" },
+      { run: function(c) {
+        flip.operationTimeout = 700
+        c.started = flip.run("transition", { mode: "flip" }, {})
+      } },
+      { until: function(c) { return !flip.busy }, ms: 6000 },
+      { run: function(c) { flip.operationTimeout = 30000 } },
+      { sh: "printf slow:4 > run-mode" },
+      { until: function(c) { c.t0 = Date.now(); return flip.run("transition", { mode: "flip" }, {}) }, ms: 10000 },
+      { until: function(c) { return !flip.busy }, ms: 12000 },
+      { run: function(c) { c.after = view({ seconds: (Date.now() - c.t0) / 1000 }) } },
+      { sh: "printf done > run-mode" },
+      { log: function(c) { return { started: c.started, after: c.after } } },
+    ] },
+
     { name: "watchdog-snapshot", steps: [
       { sh: "touch snapshot-hang" },
       { run: function(c) {
