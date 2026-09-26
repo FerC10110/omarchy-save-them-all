@@ -222,6 +222,8 @@ ShellRoot {
     { name: "watchdog-operation", steps: [
       { sh: "printf hang > run-mode" },
       { run: function(c) {
+        flip.stopGrace = 300
+        flip.killGrace = 300
         flip.operationTimeout = 700
         c.t0 = Date.now()
         c.started = flip.run("transition", { mode: "flip" }, {})
@@ -231,7 +233,7 @@ ShellRoot {
       { sh: "printf done > run-mode" },
       { until: function(c) { return flip.run("transition", { mode: "flip" }, {}) }, ms: 10000 },
       { until: function(c) { return !flip.busy }, ms: 8000 },
-      { run: function(c) { c.after = view(); flip.operationTimeout = 30000 } },
+      { run: function(c) { c.after = view(); flip.operationTimeout = 30000; flip.stopGrace = 9000; flip.killGrace = 30000 } },
       { log: function(c) { return { started: c.started, stopped: c.stopped, after: c.after } } },
     ] },
 
@@ -241,6 +243,8 @@ ShellRoot {
     { name: "watchdog-retry", steps: [
       { sh: "printf hang-until-term > run-mode" },
       { run: function(c) {
+        flip.stopGrace = 300
+        flip.killGrace = 1500
         flip.operationTimeout = 700
         c.started = flip.run("transition", { mode: "flip" }, {})
       } },
@@ -249,9 +253,46 @@ ShellRoot {
       { sh: "printf slow:4 > run-mode" },
       { until: function(c) { c.t0 = Date.now(); return flip.run("transition", { mode: "flip" }, {}) }, ms: 10000 },
       { until: function(c) { return !flip.busy }, ms: 12000 },
-      { run: function(c) { c.after = view({ seconds: (Date.now() - c.t0) / 1000 }) } },
+      { run: function(c) {
+        c.after = view({ seconds: (Date.now() - c.t0) / 1000 })
+        flip.stopGrace = 9000
+        flip.killGrace = 30000
+      } },
       { sh: "printf done > run-mode" },
       { log: function(c) { return { started: c.started, after: c.after } } },
+    ] },
+
+    // The watchdog lets the helper wind down: {cancel} at once, SIGTERM
+    // only a grace period later, SIGKILL only much later. Busy ends at once;
+    // meanwhile a new action is refused with its own notice.
+    { name: "watchdog-grace", steps: [
+      { sh: "rm -f signals.log; printf hang-log > run-mode" },
+      { run: function(c) {
+        flip.stopGrace = 1000
+        flip.killGrace = 1500
+        flip.operationTimeout = 700
+        service.cardAction("flip", harness.card(1))
+      } },
+      { until: function(c) { return !flip.busy }, ms: 8000 },
+      { run: function(c) {
+        c.gaveUp = Date.now()
+        c.stopping = flip.stopping
+        service.setOption("transition", { mode: "flip" })
+        c.refused = { optionNotice: service.optionNotice, optionFailed: service.optionFailed }
+      } },
+      { until: function(c) { return !flip.stopping }, ms: 10000 },
+      { run: function(c) {
+        c.gone = Date.now()
+        flip.operationTimeout = 30000
+        flip.stopGrace = 9000
+        flip.killGrace = 30000
+      } },
+      { sh: "printf done > run-mode" },
+      { read: "signals.log", into: "signals" },
+      { log: function(c) {
+        return { gaveUp: c.gaveUp, gone: c.gone, stopping: c.stopping, refused: c.refused,
+                 signals: harness.lines(c.signals).map(function(l) { return JSON.parse(l) }) }
+      } },
     ] },
 
     { name: "watchdog-snapshot", steps: [

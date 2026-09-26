@@ -91,6 +91,7 @@ var STRINGS = {
     "Cancel": "Cancelar",
     "Put at least one window on each side.": "Poné al menos una ventana en cada cara.",
     "Hyprflip is busy; try again in a moment.": "Hyprflip está ocupado; probá de nuevo en un momento.",
+    "Hyprflip is still stopping the last action; try again in a moment.": "Hyprflip todavía está deteniendo la acción anterior; probá de nuevo en un momento.",
     "The card could not be made.": "No se pudo armar la tarjeta.",
     "%1 closed and left the card.": "%1 se cerró y salió de la tarjeta.",
     "Changes saved.": "Cambios guardados.",

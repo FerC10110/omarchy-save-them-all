@@ -310,6 +310,20 @@ class ServiceTest(unittest.TestCase):
                          (False, False, 'Animation updated for every card.'))
         self.assertGreater(after['seconds'], 3.5)
 
+    def test_the_watchdog_lets_the_helper_wind_down(self):
+        r = self.result('watchdog-grace')
+        self.assertTrue(r['stopping'])
+        self.assertEqual(r['refused'], {'optionNotice': 'Hyprflip is still stopping the last action; try again in a moment.',
+                                        'optionFailed': True})
+        signals = r['signals']
+        self.assertEqual([what for _, what in signals], ['start', '{"cancel":true}', 'SIGTERM'])
+        cancel, term = signals[1][0], signals[2][0]
+        # {cancel} when the watchdog gives up; SIGTERM after stopGrace (1 s);
+        # SIGKILL after killGrace (1.5 s) more.
+        self.assertLess(abs(cancel - r['gaveUp']), 400)
+        self.assertGreater(term - cancel, 800)
+        self.assertGreater(r['gone'] - term, 1300)
+
     def test_a_hung_snapshot_is_stopped(self):
         r = self.result('watchdog-snapshot')
         self.assertTrue(r['started'])

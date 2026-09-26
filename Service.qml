@@ -194,6 +194,12 @@ Scope {
 
   // An action on a card the panel showed: Hyprflip acts on the cards of the
   // active workspace, so it goes there first.
+  // Why an action cannot start now.
+  function busyText() {
+    return flipConnection.stopping ? t("Hyprflip is still stopping the last action; try again in a moment.")
+                                   : t("Hyprflip is busy; try again in a moment.")
+  }
+
   function cardAction(action, card) {
     if (!card) return
     cardsNotice = ""
@@ -201,7 +207,7 @@ Scope {
     var started = flipConnection.run(action, {}, { card: CardsModel.reference(card), workspace: card.workspace, reopen: true,
                                                    from: panel })
     if (!started) {
-      cardsNotice = t("Hyprflip is busy; try again in a moment.")
+      cardsNotice = busyText()
       cardsFailed = true
     }
   }
@@ -215,7 +221,7 @@ Scope {
     optionFailed = false
     var started = flipConnection.run(action, extra, { reopen: true, from: panel })
     if (!started) {
-      optionNotice = t("Hyprflip is busy; try again in a moment.")
+      optionNotice = busyText()
       optionFailed = true
     }
     return started
@@ -278,13 +284,13 @@ Scope {
       return
     }
     if (!Builder.ready(draft)) { builderNotice = t("Put at least one window on each side."); return }
-    if (flipConnection.busy) { builderNotice = t("Hyprflip is busy; try again in a moment."); return }
+    if (flipConnection.busy) { builderNotice = busyText(); return }
     if (!flipConnection.canCreate) { builderNotice = flipConnection.unavailableText || t("The card could not be made."); return }
     builderNotice = ""
     pendingName = null
     var started = flipConnection.run("create", Builder.request(draft), {
       workspace: draft.workspace, replace: draft.mode === "edit" ? draft.card : null, reopen: true, from: panel })
-    if (!started) builderNotice = t("Hyprflip is busy; try again in a moment.")
+    if (!started) builderNotice = busyText()
   }
 
   // A window of the draft closed: it leaves the card, the rest stays.

@@ -28,6 +28,11 @@ Scope {
   // Generous: a run waits for a flip to end or apps to settle.
   property int snapshotTimeout: 15000
   property int operationTimeout: 30000
+  // A helper that was told to cancel gets this long to wind down at its own
+  // safe points (a rebuild it started may need to finish) before SIGTERM,
+  // and then this much longer before SIGKILL.
+  property int stopGrace: 9000
+  property int killGrace: 30000
 
   property var status: ({ available: false, reason: "", fix: "", detail: "", hyprland: "", built_for: "", hyprflip: "" })
   property var snapshot: Protocol.emptySnapshot()
@@ -65,6 +70,9 @@ Scope {
   property var helperExit: null
   property var helperErrors: null
   readonly property bool busy: pending !== null
+  // No action is pending, but a helper the panel gave up on is still
+  // winding down: run() refuses until it is gone.
+  readonly property bool stopping: !busy && operationProcess.running
   readonly property bool checking: statusProcess.running
 
   signal finished(string action, bool ok, string message, var pending)
@@ -126,12 +134,14 @@ Scope {
 
   // The action took too long (a helper, snapshot or switch that hangs, or
   // never started): stop what still runs, say so, and let the panel go on.
+  // The helper is only asked to cancel: a signal could land in the middle of
+  // putting a card back together. cancelTimer and killTimer follow up if it
+  // does not end.
   function giveUp() {
     if (!pending) return
     if (operationProcess.running) {
       root.write({ cancel: true })
-      operationProcess.signal(15)
-      killTimer.restart()
+      if (!cancelTimer.running) cancelTimer.restart()
     }
     // A killed snapshot still prints what it had: accept() drops it.
     if (snapshotProcess.running) {
@@ -328,14 +338,17 @@ Scope {
   // A helper that ignores the cancel is stopped; it is our own child process.
   Timer {
     id: cancelTimer
-    interval: 9000
-    onTriggered: if (operationProcess.running) operationProcess.signal(15)
+    interval: root.stopGrace
+    onTriggered: if (operationProcess.running) {
+      operationProcess.signal(15)
+      killTimer.restart()
+    }
   }
 
-  // One that ignores SIGTERM too, after the watchdog gave up on it.
+  // One that ignores SIGTERM too.
   Timer {
     id: killTimer
-    interval: 3000
+    interval: root.killGrace
     onTriggered: if (operationProcess.running) operationProcess.signal(9)
   }
 

@@ -6,7 +6,9 @@ cards `snapshot` lists, and the harness steers it with files there:
   snapshot-slow   `snapshot` answers after half a second
   run-mode        what `run` does: done (default), done-no-card, hang (and
                   ignore SIGTERM), hang-until-term (hang, but end on SIGTERM
-                  as control.py does: "cancelled", exit 0), crash (stderr,
+                  as control.py does: "cancelled", exit 0), hang-log (hang,
+                  ignore SIGTERM, and log to signals.log, in epoch ms, when
+                  it started, each stdin line and each SIGTERM), crash (stderr,
                   exit 3), error:<message>, say:<message> (done with that
                   message), slow:<seconds> (done that long after the resume)
 Every run request is appended to requests.jsonl. Like the real helper, a run
@@ -95,6 +97,16 @@ def run(request):
             send('cancelled', message='Cancelado. Las apps ya abiertas no se cierran.')
             os._exit(0)
         signal.signal(signal.SIGTERM, cancelled)
+        time.sleep(120)
+        return 0
+    if mode == 'hang-log':
+        def log(what):
+            with open(HERE / 'signals.log', 'a') as f:
+                f.write(json.dumps([round(time.time() * 1000), what]) + '\n')
+        signal.signal(signal.SIGTERM, lambda *_: log('SIGTERM'))
+        log('start')
+        for line in sys.stdin:
+            log(line.strip())
         time.sleep(120)
         return 0
     if mode == 'crash':
