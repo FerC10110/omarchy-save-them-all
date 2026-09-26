@@ -94,13 +94,46 @@ class RebuildTest(ScriptTest):
         self.assertEqual(out['notes'], ['Card Calculator ↔ Obsidian + weird could not be rebuilt: Una de las apps elegidas se cerró.'])
         self.assertIn('could not be rebuilt', (self.state_dir / 'restore.log').read_text())
 
-    def test_hung_helper_is_killed_and_noted(self):
+    def two_cards(self):
+        state = self.hypr()
+        state['clients'].append(client('0x5', 'firefox'))
+        self.hypr_state(**state)
+        windows = W + [saved_window('firefox', (0, 0), (480, 1080), None)]
+        second = {'name': '', 'faces': [{'windows': [0], 'axis': 'row', 'ratios': [1.0]},
+                                        {'windows': [4], 'axis': 'row', 'ratios': [1.0]}],
+                  'visible': 0, 'floating': None}
+        return self.write_saved(3, windows, cards=[CARD, second]), json.dumps(['0x1', '0x2', '0x3', '0x4', '0x5'])
+
+    def test_hung_helper_is_stopped_and_noted(self):
+        # A hung helper is asked to stop (SIGTERM: it cleans up then), the
+        # card is noted and logged, and the next card still gets its turn.
         self.helper_config(outcome='hang')
+        path, addresses = self.two_cards()
         started = time.monotonic()
-        out = self.rebuild(env={'SAVE_THEM_ALL_HELPER_TIMEOUT': '1'})
+        out = self.cards_json('rebuild', '--file', str(path), '--addresses', addresses,
+                              env={'SAVE_THEM_ALL_HELPER_TIMEOUT': '1'})
         self.assertLess(time.monotonic() - started, 20)
         self.assertEqual(out['built'], 0)
+        self.assertEqual(len(out['notes']), 2)
         self.assertIn('did not answer within 1 s', out['notes'][0])
+        self.assertEqual([r['faces'] for r in self.helper_requests()],
+                         [[['address:0x2'], ['address:0x3', 'address:0x4']], [['address:0x1'], ['address:0x5']]])
+        self.assertEqual(self.helper_signals(), ['TERM', 'TERM'])
+        log = (self.state_dir / 'restore.log').read_text()
+        self.assertIn('Card Calculator ↔ Obsidian + weird could not be rebuilt: The Hyprflip helper did not answer within 1 s', log)
+
+    def test_a_helper_that_ignores_sigterm_is_killed(self):
+        self.helper_config(outcome='hang-hard')
+        started = time.monotonic()
+        out = self.rebuild(env={'SAVE_THEM_ALL_HELPER_TIMEOUT': '1'})
+        self.assertLess(time.monotonic() - started, 15)
+        self.assertIn('did not answer within 1 s', out['notes'][0])
+
+    def test_a_helper_that_writes_a_lot_to_stderr_still_finishes(self):
+        # Its stderr is read while it runs: a full pipe must not hang it.
+        self.helper_config(stderr=300000)
+        self.assertEqual(self.rebuild(), {'built': 1, 'kept': 0, 'notes': []})
+        self.assertIn(' helper: ', (self.state_dir / 'restore.log').read_text())
 
     def test_an_unreadable_answer_is_noted(self):
         self.helper_config(outcome='garbage')

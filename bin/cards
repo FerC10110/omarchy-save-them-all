@@ -863,8 +863,11 @@ def ungroup(args):
 def run_helper(request):
     """One helper operation, start to end: every focus handoff is resumed
     (nobody here holds a keyboard grab), every question refused (a restore
-    asks nothing) and the helper killed if it has not finished in
-    HELPER_TIMEOUT seconds. -> (kind, message)"""
+    asks nothing) and the helper stopped if it has not finished in
+    HELPER_TIMEOUT seconds: SIGTERM first, so it can clean up the way it
+    does on its own, then SIGKILL if it is still there 2 s later. Its
+    stderr is read while it runs, so a chatty helper never fills the pipe
+    and stalls. -> (kind, message)"""
     try:
         proc = subprocess.Popen(['python3', str(HELPER), 'run', '--request', json.dumps(request)],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -874,15 +877,28 @@ def run_helper(request):
 
     def expire():
         expired.set()
-        proc.kill()
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
     timer = threading.Timer(HELPER_TIMEOUT, expire)
     timer.start()
+    errors = []
+    reader = threading.Thread(target=lambda: errors.append(proc.stderr.read()), daemon=True)
+    reader.start()
 
     def write(value):
         try:
             proc.stdin.write(json.dumps(value) + '\n')
             proc.stdin.flush()
         except (OSError, ValueError):
+            pass
+
+    def close_stdin():
+        try:
+            proc.stdin.close()
+        except OSError:
             pass
     outcome = ('error', msg('The Hyprflip helper stopped without an answer'))
     try:
@@ -899,14 +915,19 @@ def run_helper(request):
                 write({'cancel': True})
             elif kind in ('done', 'error', 'cancelled'):
                 outcome = (kind, str(message.get('message') or ''))
+                close_stdin()   # the operation is over: nothing more to answer
+        close_stdin()
         proc.wait()
-        errors = proc.stderr.read()
+        reader.join()
     finally:
         timer.cancel()
+        close_stdin()
     if expired.is_set():
+        timer.join()   # its SIGKILL, if any, has been sent
         return 'error', msg('The Hyprflip helper did not answer within %1 s', f'{HELPER_TIMEOUT:g}')
-    if errors.strip():
-        log('helper: ' + errors.strip()[-500:])
+    text = ''.join(errors).strip()
+    if text:
+        log('helper: ' + text[-500:])
     return outcome
 
 
