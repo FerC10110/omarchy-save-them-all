@@ -648,7 +648,9 @@ def capture(args):
 def preserve(args):
     """The cards of the previous save, moved onto the windows saved now. A
     window matches one with the same class and the same launcher, in order;
-    a card that lost a window is dropped, and the notes say so."""
+    a card that lost a window is dropped, and the notes say so. A previous
+    file whose cards cannot be read is a warning, not a note: news for a
+    save that notifies anyway, not a reason to notify a quiet one."""
     path = Path(args.previous or '')
     old, cards, problem = read_file(path)
     try:
@@ -658,7 +660,8 @@ def preserve(args):
     if not isinstance(new, list):
         raise CardsError(msg('--windows must be a JSON list of saved windows'))
     if problem:
-        return {'cards': [], 'notes': [msg('The cards saved before were ignored: %1', problem)] if path.is_file() else []}
+        return {'cards': [], 'notes': [],
+                'warnings': [note(msg('The cards saved before were ignored: %1', problem))] if path.is_file() else []}
 
     def key(w):
         return (w.get('class'), json.dumps(w.get('launch'), sort_keys=True)) if isinstance(w, dict) else None
@@ -679,7 +682,7 @@ def preserve(args):
                                            for f in card['faces']]})
         else:
             notes.append(msg('Card %1 was not kept: some of its windows are no longer saved', saved_title(card, old)))
-    return {'cards': kept, 'notes': notes}
+    return {'cards': kept, 'notes': notes, 'warnings': []}
 
 
 # -- restoring: the place of each card --------------------------------------

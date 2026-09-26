@@ -130,7 +130,13 @@ if command == 'configerrors':
     print(state.get('configerrors', ''))
     sys.exit(0)
 if command == 'hyprflip status':
-    if 'hyprflip' not in state.get('plugins', []) or state.get('hyprflip') is None:
+    # hyprflip_answers: how many more times it answers; then it stops
+    # answering, as when Hyprflip is unloaded or wedged mid-save.
+    left = state.get('hyprflip_answers')
+    if left is not None:
+        state['hyprflip_answers'] = left - 1
+        save()
+    if 'hyprflip' not in state.get('plugins', []) or state.get('hyprflip') is None or (left is not None and left <= 0):
         print('unknown request')
         sys.exit(0)
     answer(state['hyprflip'])

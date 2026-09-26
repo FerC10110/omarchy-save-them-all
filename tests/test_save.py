@@ -93,6 +93,52 @@ class SaveCardsTest(ScriptTest):
         self.assertIn('Card Calculator ↔ Obsidian was not kept: some of its windows are no longer saved',
                       self.notifications()[-1][1])
 
+    def hyprflip_stops_answering(self, clients):
+        # status and members still get their answer; capture does not.
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(), clients=clients)
+        self.run_script('save-them-all', '--quiet', env={'SAVE_THEM_ALL_STATE': str(self.tmp / 'probe')})
+        answers = self.queries().count('hyprflip status')
+        self.log_path.write_text('')
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(), clients=clients, hyprflip_answers=answers - 1)
+
+    def test_hyprflip_not_answering_with_nothing_saved_before_says_nothing_was_kept(self):
+        self.hyprflip_stops_answering([client('0x1', 'kitty', tags=['terminal'])])
+        r = self.run_script('save-them-all', '--quiet')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn('cards', self.saved(3))
+        self.assertNotIn('saved before were kept', r.stderr)
+        self.assertEqual(self.notifications(), [])
+
+    def test_hyprflip_not_answering_keeps_the_cards_saved_before(self):
+        windows = [saved_window('kitty', (0, 0), (960, 1080), TERMINAL),
+                   saved_window('org.gnome.Calculator', (960, 0), (960, 1080), CALC),
+                   saved_window('obsidian', (960, 0), (960, 1080), OBSIDIAN)]
+        card = {'name': '', 'faces': [{'windows': [1], 'axis': 'row', 'ratios': [1.0]},
+                                      {'windows': [2], 'axis': 'row', 'ratios': [1.0]}],
+                'visible': 0, 'floating': None}
+        self.write_saved(3, windows, cards=[card])
+        self.hyprflip_stops_answering([
+            client('0x1', 'kitty', at=(0, 0), size=(960, 1080), tags=['terminal']),
+            client('0x2', 'org.gnome.Calculator', at=(960, 0), size=(960, 1080)),
+            client('0x3', 'obsidian', at=(1920, 0), size=(960, 1080))])
+        r = self.run_script('save-them-all', '--quiet')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.saved(3)['cards'], [card])
+        self.assertIn('Hyprflip did not answer; the cards saved before were kept', self.notifications()[-1][1])
+
+    def test_a_broken_previous_file_is_quiet_under_quiet(self):
+        windows = [saved_window('kitty', (0, 0), (960, 1080), TERMINAL)]
+        self.write_saved(3, windows, cards=[{'faces': 'bad'}])
+        self.hypr_state(clients=[client('0x1', 'kitty', tags=['terminal'])])
+        r = self.run_script('save-them-all', '--quiet')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.notifications(), [])
+        self.assertIn('The cards saved before were ignored: card 1 needs exactly two sides', r.stderr)
+        self.assertIn('The cards saved before were ignored', (self.state_dir / 'restore.log').read_text())
+        self.write_saved(3, windows, cards=[{'faces': 'bad'}])
+        r = self.run_script('save-them-all')
+        self.assertIn('The cards saved before were ignored: card 1 needs exactly two sides', self.notifications()[-1][1])
+
     def test_login_list_counts_cards(self):
         card = {'faces': [{'windows': [0]}, {'windows': [1]}]}
         self.write_saved(3, [saved_window('a', (0, 0), (1, 1), None), saved_window('b', (1, 0), (1, 1), None)],

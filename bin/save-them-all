@@ -236,18 +236,23 @@ fi
 
 # The cards: asked to Hyprflip, or kept from the previous save when Hyprflip
 # is not there to ask. bin/cards prints {cards, notes}.
+# A previous file that cannot be read is a warning: shown when notifying
+# anyway, never a reason to notify a --quiet save (1.3 was silent there).
 none='{"cards":[],"notes":[]}'
 result=$none
 if [[ $flip == true ]]; then
   if ! result=$("$BIN_DIR/cards" capture --workspace "$ws" --addresses "$addresses" 2>/dev/null); then
     result=$("$BIN_DIR/cards" preserve --previous "$out" --windows "$entries" 2>/dev/null) || result=$none
-    result=$(jq -c --arg n "$(msg "Hyprflip did not answer; the cards saved before were kept")" '.notes += [$n]' <<<"$result")
+    # Only news when there was something to keep.
+    result=$(jq -c --arg n "$(msg "Hyprflip did not answer; the cards saved before were kept")" \
+      'if (.cards | length) > 0 then .notes += [$n] else . end' <<<"$result")
   fi
 elif [[ -f $out ]]; then
   result=$("$BIN_DIR/cards" preserve --previous "$out" --windows "$entries" 2>/dev/null) || result=$none
 fi
 cards=$(jq -c '.cards' <<<"$result")
 notes=$(jq -r '.notes[]' <<<"$result")
+warnings=$(jq -r '.warnings[]?' <<<"$result")
 k=$(jq length <<<"$cards")
 
 mkdir -p "$STATE_DIR"
@@ -271,7 +276,9 @@ else
 fi
 body=$(printf '%s\n' "${lines[@]}" | awk '{print $3}' | paste -sd ', ')
 [[ -z $notes ]] || echo "$notes" >&2
+[[ -z $warnings ]] || echo "$warnings" >&2
+news=$(printf '%s\n%s' "$notes" "$warnings" | sed '/^$/d')
 # A card left out is news even when the panel asked for quiet.
 if ((!QUIET)) || [[ -n $notes ]]; then
-  notify "$title" "$body${notes:+$'\n'$notes}"
+  notify "$title" "$body${news:+$'\n'$news}"
 fi
