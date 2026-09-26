@@ -403,9 +403,11 @@ def write_json(path, value):
 
 
 def set_name(cid, name):
+    """Remember (or forget) a card's name; CardsError when there is no
+    Hyprland session to keep it for."""
     path = names_path()
     if path is None:
-        return
+        raise CardsError(msg('there is no Hyprland session to keep it for'))
     names = read_names()
     name = clean_name(name)
     if name:
@@ -419,7 +421,10 @@ def set_name(cid, name):
 def name(args):
     if not re.fullmatch(r'\d{1,9}', args.id or ''):
         raise CardsError(msg('--id must be a card number'))
-    set_name(int(args.id), args.name or '')
+    try:
+        set_name(int(args.id), args.name or '')
+    except CardsError as error:
+        raise CardsError(msg('The name was not saved: %1', error)) from error
     return {'ok': True}
 
 
@@ -967,7 +972,7 @@ def rebuild(args):
             if new:
                 try:
                     set_name(new['id'], card['name'])
-                except OSError as error:
+                except (OSError, CardsError) as error:
                     result['notes'].append(note(msg('Card %1 was rebuilt, but its name could not be saved: %2', title, error)))
     return result
 

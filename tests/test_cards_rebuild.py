@@ -39,6 +39,12 @@ class RebuildTest(ScriptTest):
         self.rebuild([dict(CARD, name='Trading')])
         self.assertEqual(json.loads((self.runtime / 'cards-save-them-all-test.json').read_text()), {'1': 'Trading'})
 
+    def test_a_name_with_no_session_to_keep_it_is_noted(self):
+        out = self.rebuild([dict(CARD, name='Trading')], env={'HYPRLAND_INSTANCE_SIGNATURE': ''})
+        self.assertEqual(out['built'], 1)
+        self.assertEqual(out['notes'], ['Card Trading was rebuilt, but its name could not be saved: '
+                                        'there is no Hyprland session to keep it for'])
+
     def test_second_rebuild_keeps_the_card(self):
         self.rebuild()
         self.assertEqual(self.rebuild(), {'built': 0, 'kept': 1, 'notes': []})

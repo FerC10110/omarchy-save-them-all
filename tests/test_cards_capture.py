@@ -215,6 +215,12 @@ class NamesTest(ScriptTest):
         self.cards_json('name', '--id', '7', '--name', '')
         self.assertEqual(json.loads(path.read_text()), {})
 
+    def test_a_name_with_no_hyprland_session_to_keep_it_is_not_ok(self):
+        r = self.cards('name', '--id', '7', '--name', 'Trading', env={'HYPRLAND_INSTANCE_SIGNATURE': ''})
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertEqual(r.stderr.strip(), 'cards: The name was not saved: there is no Hyprland session to keep it for')
+        self.assertEqual(list(self.runtime.iterdir()), [])
+
     def test_names_match_appnames_js(self):
         classes = ['chrome-youtube.com__-Default', 'org.gnome.Calculator', 'obsidian',
                    'org.omarchy.btop', 'chrome-x.com__a-Default', 'weird', '']
