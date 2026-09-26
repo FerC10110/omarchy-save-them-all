@@ -24,7 +24,8 @@ Column {
   property bool recording: false
   readonly property bool typing: recording
   readonly property string conflictText: selected
-    ? Shortcuts.conflict(bindings.occupied, selectedId, candidateMask, candidateKey, host.t, labelOf) : ""
+    ? Shortcuts.conflict(bindings.occupied, selectedId, candidateMask, candidateKey, host.t, labelOf,
+                         { mask: selected.mask, key: selected.key }) : ""
   // Whether the candidate chord can be saved: also false while Hyprflip is
   // busy, so a keyboard Enter and the Save button agree (Fix round 1,
   // Finding 3).

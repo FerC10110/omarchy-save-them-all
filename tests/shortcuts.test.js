@@ -58,3 +58,29 @@ test("step walks a row list by id, clamped, and starts at the first row", () => 
   assert.equal(Labels.step(rows, "b", 0), "b")
   assert.equal(Labels.step([], "a", 1), "")
 })
+
+// shortcuts.save in the Hyprflip helper refuses these too; the page should
+// say so before Save, not after the helper turns the chord down.
+test("conflict mirrors the helper: a binding with no key, and one sharing the current chord", () => {
+  const labelOf = b => b.label
+  const occupied = [
+    { id: "flip", mask: 76, key: "F", keycode: 0, submap: "", universal: false, label: "Voltear tarjeta" },
+    // Hyprland reported neither a symbol nor a code for it.
+    { id: null, mask: 13, key: "", keycode: 0, submap: "", universal: false, label: "Unknown key" },
+    { id: null, mask: 13, key: "", keycode: 0, submap: "resize", universal: false, label: "Submap unknown" },
+  ]
+  assert.equal(Shortcuts.conflict(occupied, "peek", 13, "P", t, labelOf),
+    "Hyprland did not report the key of Unknown key, so it cannot be checked. Choose other modifiers.")
+  assert.equal(Shortcuts.conflict(occupied, "peek", 12, "P", t, labelOf), "")
+  // Another binding already uses the action's current chord: the helper will
+  // not unbind it, whatever the new chord is.
+  const shared = occupied.concat([{ id: null, mask: 76, key: "P", keycode: 0, submap: "resize", universal: false, label: "Resize P" }])
+  assert.equal(Shortcuts.conflict(shared, "peek", 8, "X", t, labelOf, { mask: 76, key: "P" }),
+    "Resize P also uses this action's current shortcut, so Hyprflip cannot change it. Change that one first.")
+  // The action's own binding is skipped only outside a submap, like the helper.
+  const own = [{ id: "peek", mask: 76, key: "P", keycode: 0, submap: "", universal: false, label: "Peek" },
+               { id: "peek", mask: 64, key: "X", keycode: 0, submap: "resize", universal: true, label: "Peek in resize" }]
+  assert.equal(Shortcuts.conflict(own, "peek", 76, "P", t, labelOf, { mask: 76, key: "P" }), "")
+  assert.equal(Shortcuts.conflict(own, "peek", 64, "X", t, labelOf, { mask: 76, key: "P" }),
+    "Used by Peek in resize. Choose another shortcut.")
+})

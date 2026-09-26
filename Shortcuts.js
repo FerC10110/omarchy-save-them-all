@@ -62,16 +62,30 @@ function capture(code, modifiers, autoRepeat, t) {
   return { mask: mask, key: key }
 }
 
-// Why the chord cannot go to selectedId, or "". A binding in a submap only
-// counts when it is universal; a physical-key binding blocks its modifiers.
-function conflict(occupied, selectedId, mask, key, t, labelOf) {
-  var found = (occupied || []).find(function(b) {
-    return b.id !== selectedId && (!b.submap || b.universal) && b.mask === mask
-      && (String(b.key).toLowerCase() === String(key).toLowerCase() || b.keycode)
-  })
-  if (!found) return ""
-  if (found.keycode) return t("A physical-key shortcut uses these modifiers. Choose other modifiers.")
-  return t("Used by %1. Choose another shortcut.", [labelOf(found)])
+// Why the chord cannot go to selectedId, or "": the same refusals as the
+// helper's shortcuts.save, binding by binding in its order. A binding in a
+// submap only counts when it is universal; a physical-key binding, or one
+// Hyprland reported without a key, blocks its modifiers; and a binding that
+// shares the action's current chord (current: { mask, key }) blocks any
+// change, since the helper would not know which one to unbind.
+function conflict(occupied, selectedId, mask, key, t, labelOf, current) {
+  var now = current && current.key ? [current.mask, String(current.key).toLowerCase()] : null
+  var list = occupied || []
+  for (var i = 0; i < list.length; i++) {
+    var b = list[i]
+    if (b.id === selectedId && !b.submap) continue
+    var bKey = String(b.key || "").toLowerCase()
+    var counts = !b.submap || b.universal
+    if (now && b.mask === now[0] && bKey === now[1])
+      return t("%1 also uses this action's current shortcut, so Hyprflip cannot change it. Change that one first.", [labelOf(b)])
+    if (counts && b.mask === mask && bKey !== "" && bKey === String(key).toLowerCase())
+      return t("Used by %1. Choose another shortcut.", [labelOf(b)])
+    if (counts && b.mask === mask && b.keycode)
+      return t("A physical-key shortcut uses these modifiers. Choose other modifiers.")
+    if (counts && b.mask === mask && bKey === "")
+      return t("Hyprland did not report the key of %1, so it cannot be checked. Choose other modifiers.", [labelOf(b)])
+  }
+  return ""
 }
 
 if (typeof module !== "undefined") {

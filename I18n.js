@@ -153,6 +153,8 @@ var STRINGS = {
     "Use a letter, a number, a function key or a navigation key.": "Usá una letra, un número, una tecla de función o de navegación.",
     "A physical-key shortcut uses these modifiers. Choose other modifiers.": "Un atajo de tecla física usa estos modificadores. Elegí otros.",
     "Used by %1. Choose another shortcut.": "Lo usa %1. Elegí otro atajo.",
+    "Hyprland did not report the key of %1, so it cannot be checked. Choose other modifiers.": "Hyprland no informó la tecla de %1, así que no se puede comprobar. Elegí otros modificadores.",
+    "%1 also uses this action's current shortcut, so Hyprflip cannot change it. Change that one first.": "%1 también usa el atajo actual de esta acción, así que Hyprflip no puede cambiarlo. Cambiá ese primero.",
     "Language": "Idioma",
     "Card appearance": "Apariencia de la tarjeta",
     "Space between apps": "Espacio entre apps",
