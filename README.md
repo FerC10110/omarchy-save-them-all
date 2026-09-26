@@ -307,7 +307,8 @@ omarchy bar move io.github.ferc10110.save-them-all --section left
 | `SAVE_THEM_ALL_LANG` | the Language setting | `en` or `es` for the scripts' notifications |
 | `SAVE_THEM_ALL_HYPRFLIP_HELPER` | `~/.local/lib/hyprflip/control.py` | Hyprflip's helper |
 | `SAVE_THEM_ALL_HYPRFLIP_SRC` | `~/.local/src/hyprflip-omacards` | Where Hyprflip's source is, for the fix commands shown |
-| `SAVE_THEM_ALL_HELPER_TIMEOUT` | `30` | Seconds a card may take to build before restoring gives up on it |
+| `SAVE_THEM_ALL_HELPER_TIMEOUT` | `30` | Seconds a card may take to build before restoring gives up on it (checking the helper waits this long too, 15 at most) |
+| `SAVE_THEM_ALL_PAUSE` | `0.25` | Seconds to let Hyprland settle after each move while a card is grouped as tabs (without Hyprflip) |
 
 ## Requirements
 
