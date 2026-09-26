@@ -134,11 +134,35 @@ class CaptureTest(ScriptTest):
                            [client(a, 'kitty') for a in ['0x2'] + back])
         self.assertEqual(out['cards'][0]['faces'][1]['windows'], [1, 2, 3, 4, 5])
 
+    def test_a_side_with_more_windows_than_a_file_holds_drops_the_card(self):
+        # A file holds 1 to 5 windows per side (card_problem): a sixth would
+        # make the whole cards block unreadable at restore, so this card is
+        # left out with a note and the others are kept.
+        back = ['0x3', '0x4', '0x5', '0x6', '0x7', '0x8']
+        everyone = ['0x2'] + back + ['0xa', '0xb']
+        out = self.capture([container(1, [['0x2'], back]), container(2, [['0xa'], ['0xb']])], everyone,
+                           [client(a, 'kitty') for a in everyone])
+        self.assertEqual([c['faces'][0]['windows'] for c in out['cards']], [[7]])
+        self.assertEqual(out['notes'], ['Card kitty ↔ kitty + kitty + kitty + kitty + kitty + kitty was not saved: '
+                                        'a side has more than 5 windows'])
+        self.assertIn('a side has more than 5 windows', (self.state_dir / 'restore.log').read_text())
+
+    def test_a_window_in_two_live_cards_is_saved_in_the_first_only(self):
+        # Two cards claiming one window would make the file unreadable ("a
+        # window is in two cards"): the second one is left out with a note.
+        self.hypr_state(plugins=['hyprflip'], border_size=0,
+                        hyprflip=flip([container(1, [['0x2'], ['0x3']])], pairs=[pair(4, '0x4', '0x3')]),
+                        clients=[client('0x2', 'a'), client('0x3', 'b'), client('0x4', 'c')])
+        out = self.cards_json('capture', '--workspace', '3', '--addresses', json.dumps(['0x2', '0x3', '0x4']))
+        self.assertEqual([[f['windows'] for f in c['faces']] for c in out['cards']], [[[0], [1]]])
+        self.assertEqual(out['notes'], ['Card c ↔ b was not saved: one of its windows is already in another card'])
+
     def test_a_window_that_was_not_saved_leaves_the_card(self):
         out = self.capture([container(1, [['0x2'], ['0x3', '0x9']])], ['0x2', '0x3'],
                            [client('0x2', 'a'), client('0x3', 'b'), client('0x9', 'org.omarchy.screensaver')])
         self.assertEqual(out['cards'][0]['faces'][1]['windows'], [1])
         self.assertEqual(out['notes'], ['screensaver left card a ↔ b + screensaver: it is not among the saved windows'])
+        self.assertIn('screensaver left card', (self.state_dir / 'restore.log').read_text())
 
     def test_a_side_with_no_saved_window_drops_the_card(self):
         out = self.capture([container(1, [['0x2'], ['0x9']])], ['0x2'],

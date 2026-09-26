@@ -63,5 +63,7 @@
   "Cards were not rebuilt: workspace %1 would not stay focused": "No se rearmaron las tarjetas: el escritorio %1 no se quedó enfocado",
   "Windows restored on workspace %1, cards with notes": "Ventanas restauradas en el escritorio %1, tarjetas con avisos",
   "there is no Hyprland session to keep it for": "no hay una sesión de Hyprland donde guardarlo",
-  "The name was not saved: %1": "El nombre no se guardó: %1"
+  "The name was not saved: %1": "El nombre no se guardó: %1",
+  "Card %1 was not saved: a side has more than 5 windows": "La tarjeta %1 no se guardó: una cara tiene más de 5 ventanas",
+  "Card %1 was not saved: one of its windows is already in another card": "La tarjeta %1 no se guardó: una de sus ventanas ya está en otra tarjeta"
 }
