@@ -368,6 +368,21 @@ ShellRoot {
                  page: panelA.page }
       } },
     ] },
+
+    // Language picked four times in a row: it ends on the last one, with no
+    // step back to an older one on the way.
+    { name: "language", steps: [
+      { run: function(c) {
+        harness.languages = []
+        service.setLanguage("es")
+        service.setLanguage("en")
+        service.setLanguage("es")
+        service.setLanguage("en")
+      } },
+      { sleep: 1500 },
+      { read: harness.stateDir + "/settings.json", into: "file" },
+      { log: function(c) { return { history: harness.languages, file: JSON.parse(c.file || "{}"), now: service.languageSetting } } },
+    ] },
   ]
 
   property int scenario: -1

@@ -352,3 +352,9 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(r['sent'], 0)
         self.assertEqual(r['names'], ['--id 2 --name Renamed'])
         self.assertEqual((r['draft'], r['notice'], r['page']), (None, 'Changes saved.', 'cards'))
+
+    def test_fast_language_changes_end_on_the_last_one(self):
+        r = self.result('language')
+        self.assertEqual(r['history'], ['es', 'en', 'es', 'en'])
+        self.assertEqual(r['file'].get('language'), 'en')
+        self.assertEqual(r['now'], 'en')

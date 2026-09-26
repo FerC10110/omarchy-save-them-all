@@ -100,11 +100,21 @@ Scope {
   }
 
   function setLanguage(value) {
-    var next = Object.assign({}, settingsData, { language: value })
-    settingsData = next
+    settingsData = Object.assign({}, settingsData, { language: value })
+    writeSettings()
+  }
+
+  // One write at a time, the latest settings last: a pick made while a
+  // write runs waits for it (setting `running` again would only queue a
+  // restart of the old command), and the file watcher ignores what lands
+  // meanwhile, or an older pick would come back for a moment.
+  property bool settingsQueued: false
+  function writeSettings() {
+    if (settingsWrite.running) { settingsQueued = true; return }
+    settingsQueued = false
     settingsWrite.command = ["sh", "-c",
       'mkdir -p "$1" && printf "%s\\n" "$2" >"$1/.settings.tmp" && mv "$1/.settings.tmp" "$1/settings.json"',
-      "sh", stateDir, JSON.stringify(next)]
+      "sh", stateDir, JSON.stringify(settingsData)]
     settingsWrite.running = true
   }
 
@@ -352,6 +362,8 @@ Scope {
     printErrors: false
     onFileChanged: reload()
     onLoaded: {
+      // Our own write landing: settingsData already holds it, or newer.
+      if (settingsWrite.running || root.settingsQueued) return
       try {
         var data = JSON.parse(String(text() || "{}"))
         root.settingsData = data && typeof data === "object" && !Array.isArray(data) ? data : {}
@@ -361,7 +373,10 @@ Scope {
     }
   }
 
-  Process { id: settingsWrite }
+  Process {
+    id: settingsWrite
+    onExited: if (root.settingsQueued) root.writeSettings()
+  }
 
   // Card names of this Hyprland session, written by bin/cards.
   FileView {
