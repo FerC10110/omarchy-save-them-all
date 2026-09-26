@@ -33,7 +33,8 @@ Scope {
   property var panel: null          // the bar panel shown last
   property var clients: []
   property var names: ({})
-  property string cardsNotice: ""   // what bin/cards last said about an action outside a card (e.g. ungroup)
+  property string cardsNotice: ""   // what the last card action said (Cards tab)
+  property string ungroupNotice: "" // what bin/cards ungroup said when it failed (Workspace tab)
   readonly property var byAddress: {
     var out = {}
     clients.forEach(function(c) { out[c.address] = c })
@@ -88,7 +89,7 @@ Scope {
   // "Show both faces": let go of every native group on the workspace.
   function ungroup(workspace) {
     if (ungroupProcess.running) return
-    cardsNotice = ""
+    ungroupNotice = ""
     ungroupProcess.command = [binDir + "/cards", "ungroup", "--workspace", String(workspace)]
     ungroupProcess.running = true
   }
@@ -351,11 +352,11 @@ Scope {
       waitForEnd: true
       onStreamFinished: {
         var message = String(text || "").trim()
-        if (message !== "") root.cardsNotice = message.split("\n").pop().replace(/^cards: /, "")
+        if (message !== "") root.ungroupNotice = message.split("\n").pop().replace(/^cards: /, "")
       }
     }
     onExited: function(exitCode) {
-      if (exitCode === 0) root.cardsNotice = ""
+      if (exitCode === 0) root.ungroupNotice = ""
       root.refreshClients()
       flipConnection.check()
     }

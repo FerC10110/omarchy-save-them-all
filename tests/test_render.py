@@ -85,7 +85,7 @@ class RenderTest(unittest.TestCase):
             'workspace-cards-notice-es': ['Algunas ventanas siguen en un grupo; probá de nuevo'],
             'builder-new-en': ['New card', 'Front', 'Back', 'Create card', 'Windows', 'kitty · left', 'Pick on screen'],
             'builder-edit-es': ['Editar tarjeta', 'Frente', 'Reverso', 'Guardar cambios', 'Cancelar'],
-            'builder-notice-es': ['Una cara admite hasta 5 ventanas.', 'Nueva tarjeta', '＋ soltá acá'],
+            'builder-notice-es': ['Una cara admite hasta 5 ventanas.', 'Nueva tarjeta', '＋ soltá acá', 'Escritorio 3 · 1 ventana'],
             'cards-en': ['Notes', 'Tiled', 'Front: Calculator', 'Back: Obsidian', 'Flip', 'New card'],
             'cards-es': ['Mosaico', 'Frente: Calculator', 'Reverso: Obsidian', 'Voltear', 'Desarmar', 'Tarjeta creada.'],
             'cards-unavailable-es': ['Las tarjetas necesitan Hyprflip', 'El asistente de Hyprflip no está instalado'],
@@ -117,6 +117,8 @@ class RenderTest(unittest.TestCase):
             'workspace-empty-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
             'workspace-unsettled-es': ['Tarjetas en pausa', 'Mostrar las dos caras'],
             'cards-unsettled-es': ['Las tarjetas necesitan Hyprflip'],
+            'workspace-card-notice-es': ['Tarjeta creada.'],
+            'builder-notice-es': ['1 ventanas'],
         }
         for name, unshown in hidden.items():
             texts = self.pages[name][1]

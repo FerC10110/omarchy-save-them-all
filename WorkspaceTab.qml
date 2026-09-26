@@ -66,8 +66,8 @@ Column {
   Text {
     textFormat: Text.PlainText
     width: parent.width
-    visible: tab.service && tab.service.cardsNotice !== ""
-    text: tab.service ? tab.service.cardsNotice : ""
+    visible: tab.service && tab.service.ungroupNotice !== ""
+    text: tab.service ? tab.service.ungroupNotice : ""
     color: host.urgent
     font.family: host.fontFamily
     font.pixelSize: Style.font.bodySmall

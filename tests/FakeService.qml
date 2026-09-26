@@ -17,6 +17,7 @@ QtObject {
   property var draft: null
   property string builderNotice: ""
   property string cardsNotice: ""
+  property string ungroupNotice: ""
   property var pickDraft: null
   property int pickFace: 0
   readonly property var byAddress: {
@@ -58,6 +59,7 @@ QtObject {
     pickFace = f.pickFace || 0
     builderNotice = f.builderNotice || ""
     cardsNotice = f.cardsNotice || ""
+    ungroupNotice = f.ungroupNotice || ""
     flip.status = f.status || { available: true, reason: "ok" }
     flip.snapshot = Protocol.parseSnapshot(JSON.stringify(f.snapshot || {})).snapshot
     if (f.emptyCards) flip.snapshot = Object.assign({}, flip.snapshot, { cards: [] })

@@ -14,7 +14,10 @@ var STEPS = [
   // bin/cards ungroup failed (windows still grouped after 64 tries): the
   // Workspace tab shows what the script said, translated.
   { name: "workspace-cards-notice-es", page: "WorkspaceTab.qml", lang: "es",
-    patch: { cardsNotice: "Algunas ventanas siguen en un grupo; probá de nuevo" } },
+    patch: { ungroupNotice: "Algunas ventanas siguen en un grupo; probá de nuevo" } },
+  // A card action's notice ("Card created.") belongs to the Cards tab; the
+  // Workspace tab only shows what ungroup said, in its warning color.
+  { name: "workspace-card-notice-es", page: "WorkspaceTab.qml", lang: "es", patch: { cardsNotice: "Tarjeta creada." } },
   { name: "builder-new-en", page: "CardBuilder.qml", lang: "en",
     patch: { draft: { mode: "create", card: null, workspace: 3, faces: [["0x1"], ["0x4", "0x5"]], axes: ["row", "column"],
                       visible: 0, floating: null, name: "Work", cursor: "0x4" } } },
