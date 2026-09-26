@@ -6,7 +6,8 @@ FAKE_HELPER_STATE (JSON, optional) sets how it behaves:
   containers (true), max_panes (5),
   outcome: "done" | "error" | "hang" | "hang-hard" | "garbage" (default "done"), message,
   snapshot: "ok" | "hang" | "garbage" (default "ok"),
-  stderr: how many bytes to write to stderr before answering a run (0).
+  stderr: how many bytes to write to stderr before answering a run (0),
+  stderr_binary: true to write bytes that are not UTF-8 to stderr first.
 A "hang" quits on SIGTERM, cleaning up as the real helper does, and logs
 {"helper_signal": "TERM"}; a "hang-hard" ignores SIGTERM, so only SIGKILL
 ends it. Every snapshot is logged as {"helper_snapshot": true} and every run
@@ -98,6 +99,9 @@ def main():
         return 0
     request = json.loads(sys.argv[sys.argv.index('--request') + 1])
     log({'helper': request})
+    if cfg.get('stderr_binary'):
+        sys.stderr.buffer.write(b'bad \xff\xfe bytes\n')
+        sys.stderr.flush()
     if cfg.get('stderr'):
         sys.stderr.write('x' * (cfg['stderr'] - 1) + '\n')
         sys.stderr.flush()

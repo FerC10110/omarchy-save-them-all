@@ -146,6 +146,15 @@ class RebuildTest(ScriptTest):
         self.assertEqual(self.rebuild(), {'built': 1, 'kept': 0, 'notes': []})
         self.assertIn(' helper: ', (self.state_dir / 'restore.log').read_text())
 
+    def test_a_helper_stderr_that_is_not_utf8_is_still_read(self):
+        self.helper_config(stderr_binary=True)
+        path = self.write_saved(3, W, cards=[CARD])
+        r = self.cards('rebuild', '--file', str(path), '--addresses', json.dumps(['0x1', '0x2', '0x3', '0x4']))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout), {'built': 1, 'kept': 0, 'notes': []})
+        self.assertEqual(r.stderr, '')
+        self.assertIn(' helper: bad \ufffd\ufffd bytes', (self.state_dir / 'restore.log').read_text())
+
     def test_an_unreadable_answer_is_noted(self):
         self.helper_config(outcome='garbage')
         self.assertIn('unreadable answer', self.rebuild()['notes'][0])
@@ -178,9 +187,8 @@ class RebuildTest(ScriptTest):
         self.assertEqual(sorted(self.clients_by_address()['0x2']['grouped']), ['0x2', '0x3', '0x4'])
 
     def test_a_card_too_big_for_the_containers_falls_back_only_for_that_card(self):
-        # container_max_panes = 1 (e.g. no container provider, just
-        # create_faces + containers advertised true): CARD's back (2
-        # windows) does not fit, but a plain 1-vs-1 card still does, in the
+        # max_panes = 1 (a provider whose container limit is below the
+        # side's size): CARD's back (2 windows) does not fit, but a plain 1-vs-1 card still does, in the
         # same rebuild call -- the gate is per card, not per file.
         self.helper_config(max_panes=1)
         state = self.hypr()
