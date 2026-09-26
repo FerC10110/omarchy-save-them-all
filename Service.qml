@@ -276,6 +276,9 @@ Scope {
     // Only the name changed: rename the card; rebuilding it would reset its
     // layout for nothing.
     if (Builder.nameOnly(draft)) {
+      // The card must still be there, as it was: a create would check the
+      // same against a fresh snapshot.
+      if (!flipConnection.resolve(draft.card)) { builderNotice = t("That card changed; look at it again."); return }
       setName(draft.card.id, draft.name)
       cardsNotice = t("Changes saved.")
       cardsFailed = false

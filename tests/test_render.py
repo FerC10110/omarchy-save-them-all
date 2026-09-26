@@ -332,6 +332,10 @@ class ServiceTest(unittest.TestCase):
             'notice': 'Card taken apart. Its apps stay open, but they could not go back where they were.',
             'failed': False})
 
+    def test_a_name_only_edit_of_a_card_gone_renames_nothing(self):
+        self.assertEqual(self.result('name-only-gone'), {
+            'editing': True, 'names': [], 'open': True, 'builderNotice': 'That card changed; look at it again.'})
+
     def test_a_hung_snapshot_is_stopped(self):
         r = self.result('watchdog-snapshot')
         self.assertTrue(r['started'])

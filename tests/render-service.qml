@@ -449,6 +449,31 @@ ShellRoot {
       } },
     ] },
 
+    // ...unless the card was taken apart meanwhile: then it says so, as the
+    // helper would, and renames nothing.
+    { name: "name-only-gone", steps: [
+      { sh: ": > names.log" },
+      { run: function(c) {
+        service.startBuilder(harness.card(2))
+        c.editing = service.draft !== null
+      } },
+      { sh: "python3 -c \"import json; c = json.load(open('cards.json')); " +
+            "json.dump([x for x in c if x['id'] != 2], open('cards.json', 'w'))\"" },
+      { run: function(c) { flip.refresh() } },
+      { until: function(c) { return harness.card(2) === null }, ms: 5000 },
+      { run: function(c) {
+        service.setDraftName("Gone")
+        service.submitDraft()
+      } },
+      { sleep: 500 },
+      { read: "names.log", into: "names" },
+      { log: function(c) {
+        return { editing: c.editing, names: harness.lines(c.names), open: service.draft !== null,
+                 builderNotice: service.builderNotice }
+      } },
+      { run: function(c) { service.draft = null } },
+    ] },
+
     // Language picked four times in a row: it ends on the last one, with no
     // step back to an older one on the way.
     { name: "language", steps: [
