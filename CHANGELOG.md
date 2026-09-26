@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A Hyprflip helper that hangs, or cannot start, no longer leaves the panel
+  busy until the shell reloads: the action is stopped after a while, and says
+  so.
+- Editing a card keeps the proportions of a side that did not change, once
+  the Hyprflip helper lists them; changing only its name just renames it.
+- In English, the Hyprflip helper's messages (it speaks Spanish only) show in
+  English.
+- With a panel on each monitor, handing the focus to Hyprflip closes all of
+  them. Fast language changes no longer flip back to an earlier one.
+- **Show both faces** says when it worked.
+- A card's name from the builder goes to that card only, not to one made later
+  with the same windows. A builder left open in a closed panel stops refreshing
+  windows and thumbnails. The builder notices cards made or taken apart
+  elsewhere.
+- Cards tab: `u` only unfolds a card of several apps and `t` needs floating
+  cards (their hints are greyed out otherwise), and the chosen card scrolls
+  into view.
+- Settings: a speed set by hand shows as Custom; the keyboard cannot pick what
+  the mouse cannot while Hyprflip is busy; shortcut conflicts match what
+  Hyprflip refuses; and each page shows only its own messages.
+- Pick on screen is cancelled if its monitor is unplugged.
+
 ## 2.0.0
 
 ### Added
