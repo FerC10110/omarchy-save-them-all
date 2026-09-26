@@ -445,12 +445,22 @@ rect_of() { # $1 index -> "x y w h": its card's place for a slot, its own otherw
 }
 
 # ---------- 2. Rebuild the dwindle tree ----------
+# A card floats or not as a whole: a slot takes its card's place in the
+# tree even when its own window was saved floating (a hand-edited file), so
+# it is tiled first, the way bin/cards tiles a card's windows to group them.
+for i in "${!slot[@]}"; do
+  [[ -n ${addrs[$i]:-} ]] || continue
+  is_grouped "${addrs[$i]}" && continue
+  if clients_on_ws | jq -e --arg a "${addrs[$i]}" 'any(.[]; .address == $a and .floating == true)' >/dev/null; then
+    dispatch "hl.dsp.window.float({ window = 'address:${addrs[$i]}', action = 'disable' })"
+  fi
+done
 tiled='[]'
 for i in "${!entries[@]}"; do
   [[ -n ${addrs[$i]:-} ]] || continue
   [[ -n ${hidden[$i]:-} ]] && continue
   is_grouped "${addrs[$i]}" && continue
-  [[ $(jq -r .floating <<<"${entries[$i]}") == true ]] && continue
+  [[ $(jq -r .floating <<<"${entries[$i]}") == true && -z ${slot[$i]:-} ]] && continue
   read -r x y w h < <(rect_of "$i")
   tiled=$(jq -c --argjson i "$i" --argjson x "$x" --argjson y "$y" --argjson w "$w" --argjson h "$h" \
     '. + [{i: $i, x: $x, y: $y, w: $w, h: $h}]' <<<"$tiled")

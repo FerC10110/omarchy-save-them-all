@@ -88,6 +88,30 @@ class RestoreCardsTest(ScriptTest):
         self.assertIn('Cards in workspace-3.json were ignored: card 1 needs exactly two sides', body)
         self.assertEqual(self.helper_requests(), [])
 
+    def test_a_floating_slot_of_a_tiled_card_is_tiled_like_its_card(self):
+        # Hand-edited: the card is not floating but its slot window says
+        # floating. The card decides: the slot takes its place in the tree.
+        windows = [dict(w, floating=(n == 1)) for n, w in enumerate(WINDOWS)]
+        for with_flip in (True, False):
+            with self.subTest(with_flip=with_flip):
+                self.log_path.write_text('')
+                self.write_saved(3, windows, cards=[CARD])
+                self.hypr_state(plugins=['hyprflip'] if with_flip else [], hyprflip=flip() if with_flip else None,
+                                clients=[client('0x1', 'kitty', at=(0, 0), size=(600, 600)),
+                                         client('0x2', 'org.gnome.Calculator', at=(600, 0), size=(600, 600),
+                                                floating=True),
+                                         client('0x3', 'obsidian', at=(1200, 0), size=(600, 600))])
+                r = self.run_script('restore-them-all', '--quiet')
+                self.assertEqual(r.returncode, 0, r.stderr)
+                d = self.dispatches()
+                unfloat = "hl.dsp.window.float({ window = 'address:0x2', action = 'disable' })"
+                self.assertIn(unfloat, d)
+                self.assertLess(d.index(unfloat), d.index(PARK % '0x2'))
+                self.assertIn("'address:0x2', workspace = '3'", ' '.join(d[d.index(PARK % '0x2'):]))
+                self.assertNotIn("hl.dsp.window.float({ window = 'address:0x2', state = 'on' })", d)
+                self.assertFalse(self.clients_by_address()['0x2']['floating'])
+                self.assertEqual(self.clients_by_address()['0x2']['size'], [960, 1080])
+
     def test_missing_windows_and_card_notes_are_told_together(self):
         self.write_saved(3, WINDOWS + [saved_window('ghostapp', (0, 600), (960, 480), None)], cards=[{'faces': 'bad'}])
         self.hypr_state(plugins=['hyprflip'], hyprflip=flip(), clients=[
