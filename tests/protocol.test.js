@@ -82,4 +82,6 @@ test("whyUnavailable: the status first, then an unreadable snapshot, then what t
   const down = Protocol.parseSnapshot(JSON.stringify({ protocol: 1, available: false, error: "Hyprland no responde." })).snapshot
   assert.equal(Protocol.whyUnavailable(ok, down, "", en), "The Hyprflip helper reports: Hyprland no responde.")
   assert.equal(Protocol.whyUnavailable(ok, Protocol.emptySnapshot(), "", en), "The Hyprflip helper reports: ?")
+  // say: how the panel shows a helper message in its language.
+  assert.equal(Protocol.whyUnavailable(ok, down, "", en, m => "<" + m + ">"), "The Hyprflip helper reports: <Hyprland no responde.>")
 })

@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "Protocol.js" as Protocol
+import "HelperText.js" as HelperText
 
 // The connection to Hyprflip, after OmaCards' Service.qml (MIT, see NOTICE).
 // `bin/cards status` says whether cards can be used and, if not, why; the
@@ -36,7 +37,10 @@ Scope {
   readonly property bool settled: statusChecked && (status.available !== true || snapshotChecked)
   readonly property bool canCreate: Protocol.canCreate(available, snapshot)
   readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
-  readonly property string unavailableText: Protocol.whyUnavailable(status, snapshot, snapshotProblem, t)
+  readonly property string unavailableText: Protocol.whyUnavailable(status, snapshot, snapshotProblem, t, say)
+
+  // A message the helper wrote (in Spanish only), in the panel's language.
+  function say(message) { return HelperText.forLang(message, lang) }
 
   property string notice: ""
   property bool failed: false
@@ -164,7 +168,7 @@ Scope {
     } else {
       completed = true
       if (!refused) {
-        notice = r.message
+        notice = say(r.message)
         failed = r.kind === "error"
       }
     }

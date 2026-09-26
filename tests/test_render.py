@@ -98,6 +98,8 @@ class RenderTest(unittest.TestCase):
             'cards-unsettled-es': ['Revisando Hyprflip…'],
             'cards-snapshot-unavailable-es': ['Las tarjetas necesitan Hyprflip',
                                               'El asistente de Hyprflip dice: Hyprland no responde.'],
+            'cards-snapshot-unavailable-en': ['Cards need Hyprflip',
+                                              'The Hyprflip helper reports: Hyprland is not answering.'],
             'settings-unsettled-es': ['Idioma', 'Revisando Hyprflip…'],
             'cards-empty-en': ['No cards yet. Press n to make one.'],
             'cards-pair-keys-en': ['v flip', 'u unfold', 't float', 'n new'],

@@ -44,6 +44,9 @@ var STEPS = [
   // Hyprflip cannot be used right now: the Cards tab says what it reported.
   { name: "cards-snapshot-unavailable-es", page: "CardsTab.qml", lang: "es",
     patch: { snapshot: { protocol: 1, available: false, error: "Hyprland no responde." } } },
+  // The same in English: the helper's Spanish message comes back in English.
+  { name: "cards-snapshot-unavailable-en", page: "CardsTab.qml", lang: "en",
+    patch: { snapshot: { protocol: 1, available: false, error: "Hyprland no responde." } } },
   // A native pair, and a Hyprflip without floating cards: u (the helper only
   // unfolds a container) and t do nothing, and their hints are greyed.
   { name: "cards-pair-keys-en", page: "CardsTab.qml", lang: "en",

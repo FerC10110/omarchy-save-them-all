@@ -2,6 +2,7 @@ import QtQuick
 import "SaveThemAll/I18n.js" as I18n
 import "SaveThemAll/AppNames.js" as AppNames
 import "SaveThemAll/Protocol.js" as Protocol
+import "SaveThemAll/HelperText.js" as HelperText
 
 // Service.qml's face without processes: the render harness fills it from
 // tests/fixtures/render.json, and every action does nothing.
@@ -40,7 +41,8 @@ QtObject {
     readonly property bool available: status.available === true && snapshot.available === true
     readonly property bool canCreate: Protocol.canCreate(available, snapshot)
     readonly property bool canUnpair: available && snapshot.capabilities.unpair === true
-    readonly property string unavailableText: Protocol.whyUnavailable(status, snapshot, "", t)
+    readonly property string unavailableText: Protocol.whyUnavailable(status, snapshot, "", t,
+      function(message) { return HelperText.forLang(message, fake.lang) })
     property bool busy: false
     property string notice: ""
     property bool failed: false

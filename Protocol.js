@@ -97,11 +97,13 @@ function unavailableText(status, t) {
 
 // Why Hyprflip cannot be used right now, or "": what `bin/cards status`
 // says, else an unreadable snapshot (problem from parseSnapshot), else the
-// snapshot's own error. Hyprflip.qml's unavailableText.
-function whyUnavailable(status, snapshot, problem, t) {
+// snapshot's own error, shown through say (HelperText.forLang: the helper
+// speaks Spanish only). Hyprflip.qml's unavailableText.
+function whyUnavailable(status, snapshot, problem, t, say) {
   if (!status || status.available !== true) return unavailableText(status, t)
   if (problem) return t("The Hyprflip helper sent an unreadable answer.")
-  if (!snapshot || snapshot.available !== true) return t("The Hyprflip helper reports: %1", [(snapshot && snapshot.error) || "?"])
+  var error = (snapshot && snapshot.error) || "?"
+  if (!snapshot || snapshot.available !== true) return t("The Hyprflip helper reports: %1", [say ? say(error) : error])
   return ""
 }
 
