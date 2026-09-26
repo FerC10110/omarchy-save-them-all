@@ -126,6 +126,16 @@ class ScriptTest(unittest.TestCase):
     def helper_requests(self):
         return self._log('helper')
 
+    def helper_snapshots(self):
+        return len(self._log('helper_snapshot'))
+
+    def helper_signals(self):
+        return self._log('helper_signal')
+
+    def queries(self):
+        """Every hyprctl query (not dispatch) made so far, as 'plugin list'."""
+        return self._log('hyprctl')
+
     def helper_config(self, **kw):
         self.helper_path.write_text(json.dumps(kw))
 

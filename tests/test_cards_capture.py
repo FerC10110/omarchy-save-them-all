@@ -3,6 +3,7 @@ fake Hyprflip helper."""
 import json
 from pathlib import Path
 import subprocess
+import time
 
 from scripttest import BIN, ROOT, ScriptTest, client, container, flip, pair, saved_window
 
@@ -273,3 +274,34 @@ class ErrorsTest(ScriptTest):
                                            env={'SAVE_THEM_ALL_HELPER_TIMEOUT': 'nan',
                                                 'SAVE_THEM_ALL_PAUSE': '-1'})
         self.assertEqual((timeout, pause), (30, 0.25))
+
+
+class StatusHelperTest(ScriptTest):
+    def setUp(self):
+        super().setUp()
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip())
+
+    def test_a_helper_that_hangs_is_a_helper_problem_not_a_protocol_one(self):
+        self.helper_config(snapshot='hang')
+        started = time.monotonic()
+        s = self.cards_json('status', env={'SAVE_THEM_ALL_HELPER_TIMEOUT': '1'})
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual((s['available'], s['reason']), (False, 'helper'))
+        self.assertIn('The Hyprflip helper did not answer', s['detail'])
+
+    def test_a_helper_answering_garbage_is_a_helper_problem(self):
+        self.helper_config(snapshot='garbage')
+        s = self.cards_json('status')
+        self.assertEqual((s['available'], s['reason']), (False, 'helper'))
+        self.assertIn('The Hyprflip helper did not answer', s['detail'])
+
+    def test_hyprflip_status_failing_is_no_plugin(self):
+        # Loaded, but `hyprctl hyprflip status` answers something unreadable.
+        self.hypr_state(plugins=['hyprflip'], hyprflip=None)
+        s = self.cards_json('status')
+        self.assertEqual((s['available'], s['reason']), (False, 'no-plugin'))
+        self.assertEqual(self.helper_snapshots(), 0)
+
+    def test_the_plugin_list_is_asked_once(self):
+        self.assertEqual(self.cards_json('status')['reason'], 'ok')
+        self.assertEqual(self.queries().count('plugin list'), 1)

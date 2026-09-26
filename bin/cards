@@ -186,9 +186,10 @@ def plugin_names():
     return [p.get('name') for p in plugins if isinstance(p, dict)] if isinstance(plugins, list) else []
 
 
-def flip_status():
-    """`hyprctl hyprflip status`, or None when Hyprflip is not loaded."""
-    if 'hyprflip' not in plugin_names():
+def flip_status(loaded=None):
+    """`hyprctl hyprflip status`, or None when Hyprflip is not loaded
+    (`loaded`: whether it is, when the caller already asked)."""
+    if not (('hyprflip' in plugin_names()) if loaded is None else loaded):
         return None
     state = hypr_json('hyprflip', 'status')
     return state if isinstance(state, dict) else None
@@ -211,8 +212,11 @@ def live_cards(state, now):
 
 
 def helper_snapshot():
+    """The helper's snapshot. It only reads, so it gets the helper's own
+    timeout but never more than 15 s: the panel and every save wait on it."""
     try:
-        done = subprocess.run(['python3', str(HELPER), 'snapshot'], capture_output=True, text=True, timeout=15)
+        done = subprocess.run(['python3', str(HELPER), 'snapshot'], capture_output=True, text=True,
+                              timeout=min(HELPER_TIMEOUT, 15))
         value = json.loads(done.stdout)
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         raise CardsError(msg('The Hyprflip helper did not answer: %1', error)) from error
@@ -221,17 +225,24 @@ def helper_snapshot():
     return value
 
 
+def helper_problem(snapshot):
+    """Why a helper snapshot cannot be used: 'protocol' (another protocol),
+    'helper' (it says it is not available) or '' when it can."""
+    if snapshot.get('protocol') != 1:
+        return 'protocol'
+    return '' if snapshot.get('available') else 'helper'
+
+
 def helper_can_create(snapshot):
     """Whether a helper snapshot supports building cards at all with
-    `create`: the same protocol and availability checks `status` makes,
-    plus both container capabilities. A stale provider can advertise
+    `create`: the same checks `status` makes (helper_problem), plus both
+    container capabilities. A stale provider can advertise
     `create_faces` true with no container provider at all
     (`capabilities.containers` false) -- see the Hyprflip fork's
     scripts/control.py, where that also caps every container at 1 pane
     regardless of `create_faces`."""
     caps = snapshot.get('capabilities') or {}
-    return (snapshot.get('protocol') == 1 and bool(snapshot.get('available'))
-            and bool(caps.get('create_faces')) and bool(caps.get('containers')))
+    return not helper_problem(snapshot) and bool(caps.get('create_faces')) and bool(caps.get('containers'))
 
 
 def helper_max_panes(snapshot):
@@ -271,22 +282,26 @@ def status(args):
         report.update(reason='mismatch' if mismatch else 'no-plugin', detail=errors.strip()[:300], fix=rebuild)
         return report
     try:
-        report['hyprflip'] = str((flip_status() or {}).get('version', ''))
+        report['hyprflip'] = str((flip_status(loaded=True) or {}).get('version', ''))
     except HyprError as error:
         report.update(reason='no-plugin', detail=str(error), fix=rebuild)
         return report
+    reinstall = f'python3 {SOURCE}/scripts/install-setup.py --backend-only'
     if not HELPER.is_file():
-        report.update(reason='no-helper', fix=f'python3 {SOURCE}/scripts/install-setup.py --backend-only')
+        report.update(reason='no-helper', fix=reinstall)
         return report
     try:
         snapshot = helper_snapshot()
     except CardsError as error:
-        report.update(reason='protocol', detail=str(error), fix=f'python3 {SOURCE}/scripts/install-setup.py --backend-only')
+        # It is there but did not answer (hung, crashed, printed garbage):
+        # the panel shows the helper's own trouble, not a protocol mismatch.
+        report.update(reason='helper', detail=str(error), fix=reinstall)
         return report
-    if snapshot.get('protocol') != 1:
-        report.update(reason='protocol', fix=f'python3 {SOURCE}/scripts/install-setup.py --backend-only')
+    problem = helper_problem(snapshot)
+    if problem == 'protocol':
+        report.update(reason='protocol', fix=reinstall)
         return report
-    if not snapshot.get('available'):
+    if problem:
         report.update(reason='helper', detail=str(snapshot.get('error') or ''))
         return report
     report.update(available=True, reason='ok',

@@ -4,13 +4,19 @@
 FAKE_HELPER_STATE (JSON, optional) sets how it behaves:
   protocol (1), available (true), error (""), create_faces (true),
   containers (true), max_panes (5),
-  outcome: "done" | "error" | "hang" | "garbage" (default "done"), message.
-Every run request is appended to FAKE_LOG as {"helper": request}. A done
+  outcome: "done" | "error" | "hang" | "hang-hard" | "garbage" (default "done"), message,
+  snapshot: "ok" | "hang" | "garbage" (default "ok"),
+  stderr: how many bytes to write to stderr before answering a run (0).
+A "hang" quits on SIGTERM, cleaning up as the real helper does, and logs
+{"helper_signal": "TERM"}; a "hang-hard" ignores SIGTERM, so only SIGKILL
+ends it. Every snapshot is logged as {"helper_snapshot": true} and every run
+request is appended to FAKE_LOG as {"helper": request}. A done
 create adds the card to the fake Hyprland state, as Hyprflip would: one
 container whose windows share one native group, the visible side's first
 window shown."""
 import json
 import os
+import signal
 import sys
 import time
 
@@ -35,6 +41,11 @@ def save_hypr(state):
     with open(path + '.tmp', 'w') as f:
         json.dump(state, f)
     os.replace(path + '.tmp', path)
+
+
+def log(value):
+    with open(os.environ['FAKE_LOG'], 'a') as f:
+        f.write(json.dumps(value) + '\n')
 
 
 def send(kind, **payload):
@@ -69,6 +80,12 @@ def build(request):
 def main():
     cfg = config()
     if sys.argv[1] == 'snapshot':
+        log({'helper_snapshot': True})
+        if cfg.get('snapshot') == 'hang':
+            time.sleep(60)
+        if cfg.get('snapshot') == 'garbage':
+            print('this is not json')
+            return 3
         state = load_hypr()
         print(json.dumps({
             'protocol': cfg.get('protocol', 1), 'available': cfg.get('available', True),
@@ -80,8 +97,10 @@ def main():
             'cards': [], 'shortcuts': {'available': False, 'rows': [], 'occupied': []}}))
         return 0
     request = json.loads(sys.argv[sys.argv.index('--request') + 1])
-    with open(os.environ['FAKE_LOG'], 'a') as f:
-        f.write(json.dumps({'helper': request}) + '\n')
+    log({'helper': request})
+    if cfg.get('stderr'):
+        sys.stderr.write('x' * (cfg['stderr'] - 1) + '\n')
+        sys.stderr.flush()
     send('handoff', id=1)
     line = sys.stdin.readline()
     if (json.loads(line) if line.strip() else {}).get('resume') != 1:
@@ -89,6 +108,13 @@ def main():
         return 0
     outcome = cfg.get('outcome', 'done')
     if outcome == 'hang':
+        def cleanup(*_):
+            log({'helper_signal': 'TERM'})
+            sys.exit(143)
+        signal.signal(signal.SIGTERM, cleanup)
+        time.sleep(60)
+    if outcome == 'hang-hard':
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         time.sleep(60)
     if outcome == 'garbage':
         print('this is not json', flush=True)
