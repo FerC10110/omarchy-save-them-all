@@ -22,7 +22,8 @@ test("editDraft loads a card: sides, axes, the visible side and where it floats"
   assert.deepEqual(d.faces, [["0x2"], ["0x3", "0x4"]])
   assert.deepEqual(d.axes, ["row", "column"])
   assert.equal(d.visible, 1)
-  assert.deepEqual(d.card, { kind: "container", id: 1, faces: [["0x2"], ["0x3", "0x4"]] })
+  assert.deepEqual(d.card, { kind: "container", id: 1, faces: [["0x2"], ["0x3", "0x4"]], axes: ["row", "column"],
+    ratios: [null, null] })
   assert.equal(d.name, "Notes")
   const f = Builder.editDraft(Object.assign({}, CARD, { floating: true }), "", { at: [10, 20], size: [800, 600] })
   assert.deepEqual(f.floating, { at: [10, 20], size: [800, 600] })
@@ -176,7 +177,7 @@ const PAIR = { id: 5, kind: "pair", key: "pair:5", token: "p", workspace: 3, act
 test("editDraft loads a native pair as a one-and-one draft that replaces it", () => {
   const d = Builder.editDraft(PAIR, "", null)
   assert.equal(d.mode, "edit")
-  assert.deepEqual(d.card, { kind: "pair", id: 5, faces: [["0x6"], ["0x7"]] })
+  assert.deepEqual(d.card, { kind: "pair", id: 5, faces: [["0x6"], ["0x7"]], axes: ["row", "row"], ratios: [null, null] })
   assert.deepEqual(d.faces, [["0x6"], ["0x7"]])
   assert.deepEqual(d.axes, ["row", "row"])
   assert.equal(d.visible, 1)
@@ -197,4 +198,40 @@ test("contextKey changes when the cards (or floating support) change, not on a r
   // The card was taken apart: its windows are free, so the list must say so.
   assert.notEqual(a, Builder.contextKey(Builder.context([], d, {})))
   assert.notEqual(a, Builder.contextKey(Builder.context([CARD], d, { floating_members: true })))
+})
+
+// A snapshot card whose faces carry their layout's ratios (a helper that
+// lists them): an edit keeps them where a side did not change.
+const RATIOS = Object.assign({}, CARD, {
+  faces: [{ axis: "horizontal", ratios: [1], panes: [{ address: "0x2" }] },
+          { axis: "vertical", ratios: [0.7, 0.3], panes: [{ address: "0x3" }, { address: "0x4" }] }] })
+
+test("request keeps a side's ratios while its windows and their order stay", () => {
+  let d = Builder.editDraft(RATIOS, "", null)
+  assert.deepEqual(Builder.request(d).ratios, [[1], [0.7, 0.3]])
+  // Turning a side's axis keeps its proportions.
+  assert.deepEqual(Builder.request(Builder.setAxis(d, 1, "row")).ratios, [[1], [0.7, 0.3]])
+  // The back's order changed: that side starts equal, the front keeps its own.
+  d = Builder.place(d, "0x4", 1, 0, t).draft
+  assert.deepEqual(Builder.request(d).ratios, [[1], [0.5, 0.5]])
+  // Nothing kept at all: null, the helper's "start equal".
+  d = Builder.place(d, "0x9", 0, -1, t).draft
+  assert.equal(Builder.request(d).ratios, null)
+  // A snapshot without ratios (today's helper), or with bad ones: null.
+  assert.equal(Builder.request(Builder.editDraft(CARD, "", null)).ratios, null)
+  const bad = Object.assign({}, RATIOS, { faces: [Object.assign({}, RATIOS.faces[0], { ratios: [0] }),
+                                                   Object.assign({}, RATIOS.faces[1], { ratios: [1] })] })
+  assert.equal(Builder.request(Builder.editDraft(bad, "", null)).ratios, null)
+  assert.equal(Builder.request(Builder.place(Builder.newDraft(3), "0x1", 0, -1, t).draft).ratios, null)
+})
+
+test("nameOnly: an edit that changed nothing but the name", () => {
+  const d = Builder.editDraft(CARD, "Notes", null)
+  assert.equal(Builder.nameOnly(d), true)
+  assert.equal(Builder.nameOnly(Object.assign({}, d, { name: "Work" })), true)
+  assert.equal(Builder.nameOnly(Builder.setAxis(d, 0, "column")), false)
+  assert.equal(Builder.nameOnly(Builder.place(d, "0x4", 1, 0, t).draft), false)
+  assert.equal(Builder.nameOnly(Builder.remove(d, "0x4")), false)
+  assert.equal(Builder.nameOnly(Builder.newDraft(3)), false)
+  assert.equal(Builder.nameOnly(null), false)
 })

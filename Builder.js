@@ -3,7 +3,7 @@
 // Hyprflip's `create` gets. The builder page and the pick overlay only draw
 // this and call it. t is the panel's translation function.
 //
-// draft: { mode: "create" | "edit", card: null | { kind, id, faces },
+// draft: { mode: "create" | "edit", card: null | { kind, id, faces, axes, ratios },
 //          workspace, faces: [[address…], [address…]],
 //          axes: ["row" | "column", …], visible: 0 | 1,
 //          floating: null | { at, size }, name, cursor }
@@ -19,12 +19,23 @@ function newDraft(workspace) {
            visible: 0, floating: null, name: "", cursor: "" }
 }
 
+// A side's ratios as a snapshot face lists them, or null when it does not
+// (the helper's snapshot does not carry them yet) or they are not usable:
+// one number in (0, 1] per window.
+function faceRatios(face) {
+  var r = face.ratios
+  if (!Array.isArray(r) || r.length !== face.panes.length) return null
+  return r.every(function(x) { return typeof x === "number" && x > 0 && x <= 1 }) ? r.slice() : null
+}
+
 // card: a snapshot card; name: its name; rect: { at, size } of the window it
-// shows when it floats, so it keeps its place.
+// shows when it floats, so it keeps its place. draft.card keeps what the
+// card was (sides, axes, ratios): what the edit is compared against.
 function editDraft(card, name, rect) {
   var faces = card.faces.map(function(f) { return f.panes.map(function(p) { return p.address }) })
-  return { mode: "edit", card: { kind: card.kind, id: card.id, faces: faces }, workspace: card.workspace,
-           faces: copy(faces), axes: card.faces.map(function(f) { return f.axis === "vertical" ? "column" : "row" }),
+  var axes = card.faces.map(function(f) { return f.axis === "vertical" ? "column" : "row" })
+  return { mode: "edit", card: { kind: card.kind, id: card.id, faces: faces, axes: axes, ratios: card.faces.map(faceRatios) },
+           workspace: card.workspace, faces: copy(faces), axes: axes.slice(),
            visible: card.active === 1 ? 1 : 0, floating: card.floating && rect ? rect : null,
            name: name || "", cursor: "" }
 }
@@ -159,10 +170,29 @@ function ready(draft) {
   return !!draft && draft.faces[0].length > 0 && draft.faces[1].length > 0
 }
 
-// The fields of Hyprflip's `create`. Ratios start equal: a new layout.
+// The fields of Hyprflip's `create`. An edited card keeps a side's ratios
+// while that side holds the same windows in the same order (its axis may
+// turn); any other side starts equal, and with nothing kept, ratios is
+// null: the helper's "start equal", a new layout.
 function request(draft) {
+  var was = draft.card && Array.isArray(draft.card.ratios) ? draft.card : null
+  var kept = draft.faces.map(function(f, i) {
+    return was && was.ratios[i] && JSON.stringify(f) === JSON.stringify(was.faces[i]) ? was.ratios[i].slice() : null
+  })
+  var ratios = kept.some(function(r) { return r !== null }) ? kept.map(function(r, i) {
+    var n = draft.faces[i].length
+    return r || draft.faces[i].map(function() { return 1 / n })
+  }) : null
   return { faces: draft.faces.map(function(f) { return f.map(function(a) { return "address:" + a }) }),
-           axes: draft.axes.slice(), ratios: null, visible: draft.visible, floating: draft.floating }
+           axes: draft.axes.slice(), ratios: ratios, visible: draft.visible, floating: draft.floating }
+}
+
+// An edit that changed nothing but the name (the builder cannot change the
+// visible side or where it floats): no reason to rebuild the card.
+function nameOnly(draft) {
+  if (!draft || draft.mode !== "edit" || !draft.card || !Array.isArray(draft.card.axes)) return false
+  return JSON.stringify(draft.faces) === JSON.stringify(draft.card.faces)
+    && JSON.stringify(draft.axes) === JSON.stringify(draft.card.axes)
 }
 
 // Windows of the draft that live on another workspace: creating the card
@@ -228,7 +258,7 @@ if (typeof module !== "undefined") {
   module.exports = { MAX_PER_SIDE: MAX_PER_SIDE, newDraft: newDraft, editDraft: editDraft, faceOf: faceOf,
                      facesKey: facesKey, faceKey: faceKey,
                      context: context, contextKey: contextKey, reason: reason, candidates: candidates, place: place, remove: remove,
-                     setAxis: setAxis, prune: prune, ready: ready, request: request, movesFrom: movesFrom,
+                     setAxis: setAxis, prune: prune, ready: ready, request: request, nameOnly: nameOnly, movesFrom: movesFrom,
                      twinWords: twinWords, wordText: wordText, label: label, slotAspect: slotAspect,
                      submitText: submitText }
 }
