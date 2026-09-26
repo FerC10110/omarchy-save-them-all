@@ -19,6 +19,7 @@ import argparse
 from datetime import datetime, timezone
 from functools import lru_cache
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -37,9 +38,21 @@ ADDRESS = re.compile(r'^0x[0-9a-f]{1,16}$')
 AXES = {'horizontal': 'row', 'vertical': 'column'}
 MAX_PANES = 5
 PARKING = 'special:savethemall'   # the same hidden workspace restore-them-all parks windows on
-PAUSE = float(os.environ.get('SAVE_THEM_ALL_PAUSE') or 0.25)
-HELPER_TIMEOUT = float(os.environ.get('SAVE_THEM_ALL_HELPER_TIMEOUT') or 30)
 COMMANDS = {}
+
+
+def seconds(name, default, least=0):
+    """A number of seconds from the environment; the default when it is
+    unset, not a number, or below `least` (a typo must not stop the script)."""
+    try:
+        value = float(os.environ.get(name) or default)
+    except ValueError:
+        return default
+    return value if math.isfinite(value) and value >= least else default
+
+
+PAUSE = seconds('SAVE_THEM_ALL_PAUSE', 0.25)
+HELPER_TIMEOUT = seconds('SAVE_THEM_ALL_HELPER_TIMEOUT', 30, least=0.1)
 
 
 class CardsError(RuntimeError):
@@ -970,6 +983,10 @@ def main(argv=None):
         result = COMMANDS[args.command](args)
     except CardsError as error:
         print(f'cards: {error}', file=sys.stderr)
+        return 1
+    except Exception as error:   # a bug or a broken system: one line, not a traceback
+        log(f'cards {args.command}: {type(error).__name__}: {error}')
+        print(f'cards: {type(error).__name__}: {error}', file=sys.stderr)
         return 1
     print(json.dumps(result, ensure_ascii=False))
     return 0

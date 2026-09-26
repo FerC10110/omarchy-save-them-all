@@ -226,3 +226,44 @@ class NamesTest(ScriptTest):
         py = self.cards_python('print(json.dumps([cards.app_name(c) for c in json.loads(sys.argv[2])]))',
                                json.dumps(classes))
         self.assertEqual(py, js)
+
+
+class ErrorsTest(ScriptTest):
+    def fails_in_one_line(self, r, text=''):
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertEqual(r.stdout, '')
+        self.assertNotIn('Traceback', r.stderr)
+        self.assertEqual(len(r.stderr.strip().splitlines()), 1, r.stderr)
+        self.assertTrue(r.stderr.startswith('cards: '), r.stderr)
+        self.assertIn(text, r.stderr)
+
+    def test_invalid_arguments_are_one_line(self):
+        self.fails_in_one_line(self.cards('members', '--workspace', 'x'), 'workspace number')
+        self.fails_in_one_line(self.cards('members', '--workspace', '0'), 'workspace number')
+        self.fails_in_one_line(self.cards('capture', '--workspace', '3', '--addresses', '["rm -rf"]'),
+                               '--addresses')
+        self.fails_in_one_line(self.cards('layout', '--file', 'x', '--addresses', '{}'), '--addresses')
+        self.fails_in_one_line(self.cards('name', '--id', '-1', '--name', 'x'), 'card number')
+        self.fails_in_one_line(self.cards('preserve', '--previous', 'x', '--windows', '{'), '--windows')
+        r = self.cards('nonsense')
+        self.assertEqual(r.returncode, 2)   # argparse's own usage error
+        self.assertNotIn('Traceback', r.stderr)
+
+    def test_an_unexpected_error_is_one_readable_line(self):
+        # The runtime directory is a file: writing a card's name fails with an
+        # OSError no command expects, which must not end in a traceback.
+        blocked = self.tmp / 'blocked'
+        blocked.write_text('not a directory')
+        self.fails_in_one_line(self.cards('name', '--id', '7', '--name', 'x',
+                                          env={'SAVE_THEM_ALL_RUNTIME': str(blocked)}))
+
+    def test_a_timeout_that_is_not_a_number_falls_back_to_the_default(self):
+        for var in ('SAVE_THEM_ALL_HELPER_TIMEOUT', 'SAVE_THEM_ALL_PAUSE'):
+            with self.subTest(var=var):
+                r = self.cards('status', env={var: 'soon'})
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(json.loads(r.stdout)['reason'], 'no-plugin')
+        timeout, pause = self.cards_python('print(json.dumps([cards.HELPER_TIMEOUT, cards.PAUSE]))',
+                                           env={'SAVE_THEM_ALL_HELPER_TIMEOUT': 'nan',
+                                                'SAVE_THEM_ALL_PAUSE': '-1'})
+        self.assertEqual((timeout, pause), (30, 0.25))
