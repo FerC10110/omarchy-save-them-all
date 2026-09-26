@@ -38,5 +38,6 @@ QtObject {
   function toggleLogin(row) {}
   function toggleBrowserQuit() {}
   function openPage(name) { pageName = name }
+  function ensureVisible(item) {}
   function close() {}
 }

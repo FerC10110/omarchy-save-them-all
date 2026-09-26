@@ -144,6 +144,8 @@ Column {
           color: chosen ? Qt.rgba(host.accent.r, host.accent.g, host.accent.b, 0.14) : "transparent"
           border.width: chosen ? 2 : 1
           border.color: chosen ? host.accent : Qt.rgba(host.foreground.r, host.foreground.g, host.foreground.b, 0.25)
+          // j/k down a long list: keep the chosen card on screen.
+          onChosenChanged: if (chosen) host.ensureVisible(cardRow)
 
           Column {
             id: details

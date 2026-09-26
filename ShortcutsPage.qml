@@ -277,12 +277,14 @@ Column {
     model: page.bindings.rows
 
     ChoiceRow {
+      id: shortcutRow
       required property var modelData
       width: page.width
       title: page.rowTitle(modelData)
       detail: page.rowDetail(modelData)
       selected: modelData.id === page.selectedId
       cursorHere: page.cursor === modelData.id
+      onCursorHereChanged: if (cursorHere) host.ensureVisible(shortcutRow)
       enabled: modelData.editable === true
       textColor: host.foreground
       fontFamily: host.fontFamily

@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "I18n.js" as I18n
+import "Labels.js" as Labels
 
 // The panel is a face over the scripts in bin/ and over the plugin's service.
 // It shows tabs (Workspace, and later Cards and Settings) and loads each page
@@ -87,6 +88,15 @@ Panel {
 
   // Back from the builder: the Cards tab once it exists, else the first.
   function openHome() { openPage("cards" in pages ? "cards" : tabs[0]) }
+
+  // A page's keyboard cursor landed on item: scroll the panel, if it
+  // scrolls, just enough to show it (a long list of cards or settings).
+  function ensureVisible(item) {
+    if (!item || !flick.interactive) return
+    var at = item.mapToItem(column, 0, 0)
+    var y = Labels.scrollFor(at.y, item.height, flick.contentY, flick.height)
+    flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, y))
+  }
 
   function pluginPath(relative) {
     var url = String(Qt.resolvedUrl(relative))

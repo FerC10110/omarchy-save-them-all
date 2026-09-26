@@ -131,6 +131,7 @@ Column {
         detail: entry.modelData.detail
         selected: entry.modelData.selected
         cursorHere: tab.cursor === entry.modelData.id
+        onCursorHereChanged: if (cursorHere) host.ensureVisible(entry)
         textColor: host.foreground
         fontFamily: host.fontFamily
         enabled: tab.rowEnabled(entry.modelData)

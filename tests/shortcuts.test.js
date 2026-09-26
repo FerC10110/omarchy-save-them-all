@@ -94,3 +94,12 @@ test("speeds: the three presets, plus a custom row for a duration Hyprflip has t
   assert.equal(Labels.speeds(null).length, 3)
   assert.equal(Labels.speeds(undefined).length, 3)
 })
+
+test("scrollFor: the least scroll that shows a row, and none when it already shows", () => {
+  // view: 0..300 of the content
+  assert.equal(Labels.scrollFor(100, 40, 0, 300), 0)
+  assert.equal(Labels.scrollFor(290, 40, 0, 300), 30)
+  assert.equal(Labels.scrollFor(20, 40, 100, 300), 20)
+  // Taller than the view: its top wins.
+  assert.equal(Labels.scrollFor(500, 400, 0, 300), 500)
+})

@@ -84,8 +84,18 @@ function step(rows, id, delta) {
   return list[Math.max(0, Math.min(list.length - 1, i + delta))].id
 }
 
+// Where a scroll view (its top at viewTop, viewHeight tall) should stand
+// so a row at top, height tall, shows: unchanged when it already does, else
+// the least move; a row taller than the view shows its top. The panel uses
+// it to follow a keyboard cursor down a long list.
+function scrollFor(top, height, viewTop, viewHeight) {
+  if (top < viewTop || height > viewHeight) return top
+  if (top + height > viewTop + viewHeight) return top + height - viewHeight
+  return viewTop
+}
+
 if (typeof module !== "undefined") {
   module.exports = { TRANSITIONS: TRANSITIONS, SPEEDS: SPEEDS, APPEARANCES: APPEARANCES, SPACINGS: SPACINGS,
                      LANGUAGES: LANGUAGES, SHORTCUTS: SHORTCUTS, transitions: transitions, speeds: speeds, shortcutLabel: shortcutLabel,
-                     step: step }
+                     step: step, scrollFor: scrollFor }
 }
