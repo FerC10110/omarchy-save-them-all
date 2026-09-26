@@ -261,6 +261,10 @@ class ServiceTest(unittest.TestCase):
     def test_a_refresh_that_closes_nothing_leaves_the_pick_alone(self):
         self.assertEqual(self.result('prune-quiet'), {'picking': True, 'changes': 0})
 
+    def test_a_draft_alone_watches_nothing(self):
+        self.assertEqual(self.result('watchers'), {'closed': False, 'pictures': False, 'open': True, 'picking': True,
+                                                   'back': True, 'none': False})
+
     def test_a_handoff_lets_go_of_every_open_panel(self):
         r = self.result('multi-panel')
         self.assertTrue(r['started'])

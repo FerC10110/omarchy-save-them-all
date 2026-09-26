@@ -45,9 +45,16 @@ Scope {
     return { id: e.id, name: e.name, icon: e.icon, startupClass: e.startupClass, exec: e.execString }
   })
   readonly property int focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 0
-  readonly property bool watching: (panel !== null && panel.opened === true) || draft !== null
+  // Keep windows and cards fresh (event refreshes, live thumbnails) only
+  // while someone looks: a panel is open, the pick overlay is up, or the
+  // builder's card is being made. A draft left behind in a closed panel does
+  // not count; attach() refreshes everything when the panel opens again.
+  readonly property bool panelOpen: panels.some(function(p) { return !!p && p.opened === true })
+  readonly property bool watching: panelOpen || pickDraft !== null || (draft !== null && flipConnection.busy)
   readonly property var flip: flipConnection
-  readonly property bool thumbnails: true
+  // The builder's window pictures refresh every few seconds: only while a
+  // panel shows them.
+  readonly property bool thumbnails: panelOpen
   property var draft: null          // the card builder's, kept while the panel closes
   property string builderNotice: ""
   property var namedFaces: null     // a card just made, waiting for its name

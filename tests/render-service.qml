@@ -126,6 +126,30 @@ ShellRoot {
       { run: function(c) { service.finishPick(false); service.cancelBuilder() } },
     ] },
 
+    // A draft alone (every panel closed, no pick, no action) watches nothing.
+    { name: "watchers", steps: [
+      { run: function(c) {
+        panelA.opened = false
+        panelB.opened = false
+        service.startBuilder(null)
+        c.closed = service.watching
+        c.pictures = service.thumbnails
+        panelA.opened = true
+        c.open = service.watching
+        panelA.opened = false
+        service.startPick()
+        c.picking = service.watching
+        // Back from the pick, the builder shows in the panel again; closing
+        // that panel with the draft still there stops watching too.
+        service.finishPick(false)
+        c.back = service.watching
+        panelA.opened = false
+        c.none = service.watching
+        service.cancelBuilder()
+      } },
+      { log: function(c) { return { closed: c.closed, pictures: c.pictures, open: c.open, picking: c.picking, back: c.back, none: c.none } } },
+    ] },
+
     // Two monitors, a panel on each: a handoff lets go of both.
     { name: "multi-panel", steps: [
       { sh: "printf done > run-mode" },
