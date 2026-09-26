@@ -59,7 +59,26 @@ function reference(card) {
            faces: card.faces.map(function(f) { return f.panes.map(function(p) { return p.address }) }) }
 }
 
+// What the Cards tab's keys (and buttons) can do to card now. The helper
+// only unfolds a container (a native pair has nothing to unfold), and
+// floating needs Hyprflip's floating cards; canCreate and canUnpair are
+// Hyprflip's own. card null: nothing is chosen, only a new card.
+function allowed(card, capabilities, canCreate, canUnpair) {
+  var caps = capabilities || {}
+  var some = !!card
+  return { flip: some, edit: some && canCreate === true, dismantle: some && canUnpair === true,
+           unfold: some && card.kind === "container", float: some && caps.floating === true,
+           create: canCreate === true }
+}
+
+// The key hints under the list, each on or off (shown greyed) per allowed().
+function hints(can, t) {
+  return [{ text: t("v flip"), on: can.flip }, { text: t("e edit"), on: can.edit },
+          { text: t("d dismantle"), on: can.dismantle }, { text: t("u unfold"), on: can.unfold },
+          { text: t("t float"), on: can.float }, { text: t("n new"), on: can.create }]
+}
+
 if (typeof module !== "undefined") {
   module.exports = { faceNames: faceNames, title: title, groups: groups, flat: flat, step: step,
-                     modeText: modeText, sideText: sideText, reference: reference }
+                     modeText: modeText, sideText: sideText, reference: reference, allowed: allowed, hints: hints }
 }

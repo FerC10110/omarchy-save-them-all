@@ -40,6 +40,17 @@ var STEPS = [
   // premature "Cards need Hyprflip" — only "Checking Hyprflip…" (Fix round 1).
   { name: "cards-unsettled-es", page: "CardsTab.qml", lang: "es", patch: { settled: false, snapshot: {} } },
   { name: "cards-empty-en", page: "CardsTab.qml", lang: "en", patch: { emptyCards: true } },
+  // A native pair, and a Hyprflip without floating cards: u (the helper only
+  // unfolds a container) and t do nothing, and their hints are greyed.
+  { name: "cards-pair-keys-en", page: "CardsTab.qml", lang: "en",
+    patch: { snapshotPatch: {
+      capabilities: { containers: true, max_panes: 5, create_faces: true, unpair: true, floating: false },
+      cards: [{ id: 5, kind: "pair", key: "pair:5", token: "p5", current: "0x2", active: 0, unfolded: false,
+                floating: false, workspace: 3, name: "Calculator ↔ Obsidian",
+                faces: [{ index: 0, axis: "horizontal", panes: [{ address: "0x2", label: "Calculator" }] },
+                        { index: 1, axis: "horizontal", panes: [{ address: "0x3", label: "Obsidian" }] }] }] } },
+    calls: [["key", "u"], ["key", "t"], ["key", "v"]],
+    expect: { calls: [["cardAction", "flip", "pair:5"]] } },
   { name: "settings-en", page: "SettingsTab.qml", lang: "en", patch: {} },
   { name: "settings-es", page: "SettingsTab.qml", lang: "es", patch: {} },
   { name: "settings-unavailable-es", page: "SettingsTab.qml", lang: "es",

@@ -51,3 +51,21 @@ test("a native pair reads and is referenced like a one-and-one card", () => {
   assert.deepEqual(CardsModel.reference(pair), { kind: "pair", id: 5, faces: [["0x1"], ["0x2"]] })
   assert.deepEqual(CardsModel.groups([pair], 3)[0].cards.map(c => c.key), ["pair:5"])
 })
+
+test("allowed: u only unfolds a container, t needs floating cards, e/n need create, d needs unpair", () => {
+  const box = card(1, 3, [["0x1"], ["0x2"]])
+  const pair = card(5, 3, [["0x3"], ["0x4"]], { kind: "pair", key: "pair:5" })
+  const all = { floating: true }
+  assert.deepEqual(CardsModel.allowed(box, all, true, true),
+    { flip: true, edit: true, dismantle: true, unfold: true, float: true, create: true })
+  assert.deepEqual(CardsModel.allowed(pair, {}, false, false),
+    { flip: true, edit: false, dismantle: false, unfold: false, float: false, create: false })
+  assert.deepEqual(CardsModel.allowed(null, all, true, true),
+    { flip: false, edit: false, dismantle: false, unfold: false, float: false, create: true })
+})
+
+test("hints list every key, off where it cannot act", () => {
+  const pair = card(5, 3, [["0x3"], ["0x4"]], { kind: "pair", key: "pair:5" })
+  assert.deepEqual(CardsModel.hints(CardsModel.allowed(pair, {}, true, true), t).map(h => [h.text, h.on]),
+    [["v flip", true], ["e edit", true], ["d dismantle", true], ["u unfold", false], ["t float", false], ["n new", true]])
+})

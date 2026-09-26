@@ -16,6 +16,7 @@ Column {
   readonly property var groups: CardsModel.groups(flip.snapshot.cards, service.focusedWorkspace)
   property string selectedKey: ""
   readonly property var selected: CardsModel.flat(groups).find(function(c) { return c.key === selectedKey }) || null
+  readonly property var can: CardsModel.allowed(selected, flip.snapshot.capabilities, flip.canCreate, flip.canUnpair)
   spacing: Style.space(10)
 
   function titleOf(card) { return CardsModel.title(card, service.names, service.byAddress, service.appName) }
@@ -28,13 +29,13 @@ Column {
 
   function key(text) {
     var k = String(text).toLowerCase()
-    if (k === "n") { if (flip.canCreate) service.startBuilder(null); return }
+    if (k === "n") { if (can.create) service.startBuilder(null); return }
     if (!selected) return
     if (k === "v") service.cardAction("flip", selected)
-    else if (k === "e" && flip.canCreate) service.startBuilder(selected)
-    else if (k === "d" && flip.canUnpair) service.cardAction("unpair", selected)
-    else if (k === "u") service.cardAction("unfold", selected)
-    else if (k === "t") service.cardAction("floating", selected)
+    else if (k === "e" && can.edit) service.startBuilder(selected)
+    else if (k === "d" && can.dismantle) service.cardAction("unpair", selected)
+    else if (k === "u" && can.unfold) service.cardAction("unfold", selected)
+    else if (k === "t" && can.float) service.cardAction("floating", selected)
   }
 
   function activate() {
@@ -251,14 +252,38 @@ Column {
     }
   }
 
-  Text {
+  // The keys, the ones that cannot act on the chosen card greyed out.
+  Flow {
     width: parent.width
     visible: tab.flip.available
-    textFormat: Text.PlainText
-    text: host.t("v flip · e edit · d dismantle · u unfold · t float · n new")
-    color: host.dim
-    font.family: host.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
+    spacing: Style.space(4)
+
+    Repeater {
+      model: CardsModel.hints(tab.can, host.t)
+
+      Row {
+        required property var modelData
+        required property int index
+        spacing: Style.space(4)
+
+        Text {
+          visible: index > 0
+          textFormat: Text.PlainText
+          text: "·"
+          color: host.dim
+          font.family: host.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          text: modelData.text
+          color: host.dim
+          opacity: modelData.on ? 1 : 0.45
+          font.family: host.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+      }
+    }
   }
 }
