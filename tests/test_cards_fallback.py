@@ -122,7 +122,23 @@ class FallbackTest(ScriptTest):
             client('0x5', 'e', hidden=True, grouped=['0x3', '0x4', '0x5']),
             client('0x6', 'f', ws=4, grouped=['0x6', '0x7']), client('0x7', 'g', ws=4, hidden=True, grouped=['0x6', '0x7'])])
         out = self.cards_json('ungroup', '--workspace', '3')
-        self.assertGreaterEqual(out['released'], 2)
+        self.assertEqual(out['released'], 5)   # windows let go of, on this workspace only
         c = self.clients_by_address()
         self.assertEqual([a for a in ('0x1', '0x2', '0x3', '0x4', '0x5') if c[a]['grouped'] or c[a]['hidden']], [])
         self.assertEqual(c['0x7']['grouped'], ['0x6', '0x7'])
+
+    def test_ungroup_is_not_capped_by_a_fixed_count(self):
+        clients = []
+        for n in range(35):
+            a, b = f'0x{2 * n + 1:x}', f'0x{2 * n + 2:x}'
+            clients += [client(a, 'a', grouped=[a, b]), client(b, 'b', hidden=True, grouped=[a, b])]
+        self.hypr_state(clients=clients)
+        self.assertEqual(self.cards_json('ungroup', '--workspace', '3'), {'released': 70})
+        self.assertEqual([c for c in self.hypr()['clients'] if c['grouped']], [])
+
+    def test_ungroup_gives_up_on_a_group_that_will_not_let_go(self):
+        self.hypr_state(clients=[client('0x1', 'a', grouped=['0x1', '0x2']),
+                                 client('0x2', 'b', hidden=True, grouped=['0x1', '0x2'])],
+                        fail=['out_of_group'])
+        r = self.cards('ungroup', '--workspace', '3')
+        self.assertEqual((r.returncode, r.stderr.strip()), (1, 'cards: error: fake failure'))

@@ -855,17 +855,24 @@ def ungroup(args):
     """Let go of every native group on the workspace: the windows of a card
     Hyprflip can no longer flip come back as plain tiles."""
     ws = workspace_arg(args)
-    released = 0
-    for _ in range(64):
+    released, tries = set(), None
+    while True:
         grouped = [c for c in clients().values()
                    if c.get('workspace', {}).get('id') == ws and c.get('grouped')]
         if not grouped:
-            return {'released': released}
+            return {'released': len(released)}   # windows let go of
+        released.update(c['address'] for c in grouped)
+        if tries is None:
+            # Each window leaves its group with one move: twice as many
+            # tries as windows is room enough, and a bound when a move
+            # silently does nothing.
+            tries = 2 * len(grouped) + 2
+        if tries == 0:
+            raise CardsError(msg('Some windows are still in a group; try again'))
+        tries -= 1
         shown = next((c for c in grouped if not c.get('hidden')), grouped[0])
         dispatch(focus(shown['address']))
         dispatch('hl.dsp.window.move({ out_of_group = true })')
-        released += 1
-    raise CardsError(msg('Some windows are still in a group; try again'))
 
 
 # -- restoring with Hyprflip -----------------------------------------------------
