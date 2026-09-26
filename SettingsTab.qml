@@ -40,7 +40,7 @@ Column {
         out.push({ id: "transition:" + m.value, section: "animation", title: host.t(m.label), detail: host.t(m.detail),
                    selected: snap.transition === m.value, act: { kind: "transition", value: m.value } })
       })
-      Labels.SPEEDS.forEach(function(s) {
+      Labels.speeds(snap.duration_ms).forEach(function(s) {
         out.push({ id: "duration:" + s.ms, section: "speed", title: host.t(s.label), detail: host.t("%1 ms", [s.ms]),
                    selected: snap.duration_ms === s.ms, act: { kind: "duration", value: s.ms } })
       })

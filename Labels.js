@@ -55,6 +55,16 @@ function transitions(modes) {
   return TRANSITIONS.filter(function(x) { return (modes || []).indexOf(x.value) >= 0 })
 }
 
+// The speed rows for Hyprflip's duration_ms: the presets, and a "Custom"
+// one when it is set to something else (by hand, or by another tool), so
+// the Settings tab still shows which speed is on.
+function speeds(duration) {
+  var out = SPEEDS.slice()
+  if (typeof duration === "number" && !SPEEDS.some(function(s) { return s.ms === duration }))
+    out.push({ ms: duration, label: "Custom", custom: true })
+  return out
+}
+
 // The English label of a Hyprflip shortcut id, or fallback.
 function shortcutLabel(id, fallback) {
   var found = SHORTCUTS.find(function(x) { return x.id === id })
@@ -76,6 +86,6 @@ function step(rows, id, delta) {
 
 if (typeof module !== "undefined") {
   module.exports = { TRANSITIONS: TRANSITIONS, SPEEDS: SPEEDS, APPEARANCES: APPEARANCES, SPACINGS: SPACINGS,
-                     LANGUAGES: LANGUAGES, SHORTCUTS: SHORTCUTS, transitions: transitions, shortcutLabel: shortcutLabel,
+                     LANGUAGES: LANGUAGES, SHORTCUTS: SHORTCUTS, transitions: transitions, speeds: speeds, shortcutLabel: shortcutLabel,
                      step: step }
 }

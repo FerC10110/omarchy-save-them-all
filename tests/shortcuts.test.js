@@ -84,3 +84,13 @@ test("conflict mirrors the helper: a binding with no key, and one sharing the cu
   assert.equal(Shortcuts.conflict(own, "peek", 64, "X", t, labelOf, { mask: 76, key: "P" }),
     "Used by Peek in resize. Choose another shortcut.")
 })
+
+test("speeds: the three presets, plus a custom row for a duration Hyprflip has that none of them is", () => {
+  assert.deepEqual(Labels.speeds(420).map(s => [s.ms, s.label, !!s.custom]),
+    [[280, "Fast", false], [420, "Normal", false], [600, "Slow", false]])
+  assert.deepEqual(Labels.speeds(500).map(s => [s.ms, s.label, !!s.custom]),
+    [[280, "Fast", false], [420, "Normal", false], [600, "Slow", false], [500, "Custom", true]])
+  // Unknown (the helper could not read it): no row to pretend about.
+  assert.equal(Labels.speeds(null).length, 3)
+  assert.equal(Labels.speeds(undefined).length, 3)
+})

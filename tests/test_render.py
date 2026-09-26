@@ -55,11 +55,17 @@ class RenderTest(unittest.TestCase):
                                   capture_output=True, text=True, timeout=180)
         cls.returncode = done.returncode
         cls.log = done.stdout + done.stderr
-        cls.pages = {}
+        cls.pages, cls.calls, cls.state = {}, {}, {}
         for line in cls.log.splitlines():
             if 'RENDER_TEXTS ' in line:
                 name, lang, texts = line.split('RENDER_TEXTS ', 1)[1].split(' ', 2)
                 cls.pages[name] = (lang, json.loads(texts))
+            elif 'RENDER_CALLS ' in line:
+                name, calls = line.split('RENDER_CALLS ', 1)[1].split(' ', 1)
+                cls.calls[name] = json.loads(calls)
+            elif 'RENDER_STATE ' in line:
+                name, state = line.split('RENDER_STATE ', 1)[1].split(' ', 1)
+                cls.state[name] = json.loads(state)
 
     def test_every_step_renders_without_qml_errors(self):
         self.assertEqual(self.returncode, 0, self.log)
@@ -96,6 +102,7 @@ class RenderTest(unittest.TestCase):
             'settings-es': ['Idioma', 'Automático', 'Pestañas clásicas', 'Voltear', 'Atajos de teclado',
                             'Cerrar el navegador limpio'],
             'settings-unavailable-es': ['Hyprflip no está disponible', 'Hyprflip no cargó', 'Idioma'],
+            'settings-custom-speed-en': ['Fast', 'Normal', 'Slow', 'Custom', '500 ms'],
             'shortcuts-es': ['Atajos de teclado', 'Voltear la tarjeta', 'Super+Ctrl+Alt+F'],
             'settings-failed-es': ['Hyprflip está ocupado; probá de nuevo en un momento.'],
             'shortcuts-busy-en': ['Working…'],
@@ -105,6 +112,18 @@ class RenderTest(unittest.TestCase):
             texts = self.pages[name][1]
             for text in shown:
                 self.assertTrue(any(text in t for t in texts), f'{name}: {text!r} not in {texts}')
+
+    def test_steps_ask_what_they_expect(self):
+        # A step's `expect`: the service calls its `calls` made (every one,
+        # in order) and the page properties it named in `state`.
+        for step in self.steps:
+            expect = step.get('expect')
+            if not expect:
+                continue
+            if 'calls' in expect:
+                self.assertEqual(self.calls[step['name']], expect['calls'], step['name'])
+            if 'state' in expect:
+                self.assertEqual(self.state[step['name']], expect['state'], step['name'])
 
     def test_pages_do_not_show_a_cards_paused_warning_without_a_verdict(self):
         # Hyprflip ok (workspace-es), no saved cards (workspace-empty-es), and

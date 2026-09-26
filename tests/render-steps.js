@@ -1,5 +1,8 @@
 // The render harness's steps (tests/render.qml): which page, in which
-// language, and what changes from tests/fixtures/render.json. A task that
+// language, and what changes from tests/fixtures/render.json (snapshotPatch
+// changes fields of its snapshot). A step can also run `calls` on the page
+// ([function, args…], as keys would), name page properties to log in
+// `state`, and `expect` the service calls and state that follow. A task that
 // adds a page adds its steps here.
 var STEPS = [
   { name: "workspace-en", page: "WorkspaceTab.qml", lang: "en", patch: {} },
@@ -41,6 +44,9 @@ var STEPS = [
   { name: "settings-es", page: "SettingsTab.qml", lang: "es", patch: {} },
   { name: "settings-unavailable-es", page: "SettingsTab.qml", lang: "es",
     patch: { status: { available: false, reason: "mismatch", hyprland: "0.57.0", built_for: "0.56.2", fix: "make" } } },
+  // Hyprflip's duration is none of the presets (set by hand): a Custom row
+  // shows it, selected, instead of no speed at all.
+  { name: "settings-custom-speed-en", page: "SettingsTab.qml", lang: "en", patch: { snapshotPatch: { duration_ms: 500 } } },
   { name: "shortcuts-es", page: "ShortcutsPage.qml", lang: "es", patch: {} },
   // setOption()/save() now leave a notice instead of dropping a refused
   // action silently (Task 15 fix round 1): both pages show it the way

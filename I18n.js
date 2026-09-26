@@ -125,6 +125,7 @@ var STRINGS = {
     "Fast": "Rápida",
     "Normal": "Normal",
     "Slow": "Pausada",
+    "Custom": "Personalizada",
     "Classic tabs": "Pestañas clásicas",
     "Tab bars over tiled cards": "Barras de pestañas sobre las tarjetas en mosaico",
     "Card frame": "Marco de tarjeta",

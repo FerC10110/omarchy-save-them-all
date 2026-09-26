@@ -11,8 +11,12 @@ import "SaveThemAll" as SaveThemAll
 import "render-steps.js" as Steps
 
 // Loads each page of the panel with a fake host and service, one step of
-// tests/render-steps.js at a time, and logs the texts each one shows:
+// tests/render-steps.js at a time, runs the step's calls on the page, and
+// logs the texts each one shows, what it asked of the service and the page
+// properties the step names:
 //   RENDER_TEXTS <step> <lang> <json list of texts>
+//   RENDER_CALLS <step> <json list of [action, args…]>
+//   RENDER_STATE <step> <json object>
 // SAVE_THEM_ALL_CAPTURE_DIR, when set, also gets a PNG per step.
 ShellRoot {
   id: harness
@@ -61,6 +65,10 @@ ShellRoot {
       if (harness.step >= 0) {
         var done = Steps.STEPS[harness.step]
         console.log("RENDER_TEXTS " + done.name + " " + done.lang + " " + JSON.stringify(harness.texts(page.item, [])))
+        console.log("RENDER_CALLS " + done.name + " " + JSON.stringify(host.service.calls))
+        var state = {}
+        ;(done.state || []).forEach(function(k) { state[k] = page.item[k] })
+        console.log("RENDER_STATE " + done.name + " " + JSON.stringify(state))
         var dir = Quickshell.env("SAVE_THEM_ALL_CAPTURE_DIR")
         if (dir) area.grabToImage(function(result) { result.saveToFile(dir + "/" + done.name + ".png") })
       }
@@ -73,6 +81,8 @@ ShellRoot {
       var next = Steps.STEPS[harness.step]
       host.load(harness.fixture, next.lang, next.patch)
       page.setSource(Qt.resolvedUrl("SaveThemAll/" + next.page), { host: host })
+      // What a step does on the page, as keys would: [function, args…].
+      ;(next.calls || []).forEach(function(c) { page.item[c[0]].apply(page.item, c.slice(1)) })
       tick.start()
     }
   }

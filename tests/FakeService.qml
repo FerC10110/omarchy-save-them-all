@@ -20,6 +20,9 @@ QtObject {
   property string ungroupNotice: ""
   property var pickDraft: null
   property int pickFace: 0
+  // Every action a page called, as [name, args…]: what a step's `expect`
+  // checks (tests/render-steps.js).
+  property var calls: []
   readonly property var byAddress: {
     var out = {}
     clients.forEach(function(c) { out[c.address] = c })
@@ -61,32 +64,35 @@ QtObject {
     cardsNotice = f.cardsNotice || ""
     ungroupNotice = f.ungroupNotice || ""
     flip.status = f.status || { available: true, reason: "ok" }
-    flip.snapshot = Protocol.parseSnapshot(JSON.stringify(f.snapshot || {})).snapshot
+    flip.snapshot = Protocol.parseSnapshot(JSON.stringify(Object.assign({}, f.snapshot || {}, f.snapshotPatch || {}))).snapshot
     if (f.emptyCards) flip.snapshot = Object.assign({}, flip.snapshot, { cards: [] })
     flip.settled = f.settled === false ? false : true
     flip.busy = f.busy === true
     flip.notice = f.notice || ""
     flip.failed = f.failed === true
+    calls = []
   }
 
-  // Actions: the harness only looks.
+  function record(name, args) { calls = calls.concat([[name].concat(args || [])]) }
+
+  // Actions: the harness only looks, and records what was asked.
   function attach(panel) {}
-  function setLanguage(value) { languageSetting = value }
-  function setName(id, name) {}
+  function setLanguage(value) { languageSetting = value; record("setLanguage", [value]) }
+  function setName(id, name) { record("setName", [id, name]) }
   function refreshClients() {}
   function toplevelFor(address) { return null }
-  function ungroup(workspace) {}
+  function ungroup(workspace) { record("ungroup", [workspace]) }
   function moveCursor(address) {}
-  function place(address, face, index) {}
-  function removeFromDraft(address) {}
+  function place(address, face, index) { record("place", [address, face, index]) }
+  function removeFromDraft(address) { record("removeFromDraft", [address]) }
   function setAxis(face, axis) {}
   function setDraftName(name) {}
-  function submitDraft() {}
-  function cancelBuilder() {}
-  function startBuilder(card) {}
-  function cardAction(action, card) {}
-  function setOption(action, extra) {}
-  function startPick() {}
-  function pickToggle(address) {}
-  function finishPick(apply) {}
+  function submitDraft() { record("submitDraft") }
+  function cancelBuilder() { record("cancelBuilder") }
+  function startBuilder(card) { record("startBuilder", [card ? card.key : null]) }
+  function cardAction(action, card) { record("cardAction", [action, card ? card.key : null]) }
+  function setOption(action, extra) { record("setOption", [action, extra]); return true }
+  function startPick() { record("startPick") }
+  function pickToggle(address) { record("pickToggle", [address]) }
+  function finishPick(apply) { record("finishPick", [apply]) }
 }
