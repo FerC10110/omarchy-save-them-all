@@ -474,6 +474,33 @@ ShellRoot {
       { run: function(c) { service.draft = null } },
     ] },
 
+    // The panel an action came from is destroyed (its monitor unplugged)
+    // before the action ends: nothing is revealed on it, and nothing throws.
+    // The fake helper's workspace is 0 here, so reveal() would be called.
+    { name: "panel-gone", steps: [
+      { sh: "python3 -c \"import json, os; p = os.environ['FAKE_HYPR_STATE']; s = json.load(open(p)); " +
+            "s['active_workspace'] = 0; json.dump(s, open(p, 'w'))\"" },
+      { run: function(c) {
+        c.panel = Qt.createQmlObject("import QtQuick; QtObject { property bool opened: true; property int revealed: 0; " +
+          "function dismiss() { opened = false } function reveal() { revealed++; opened = true } " +
+          "function openPage(n) {} function openHome() {} }", harness)
+        service.attach(c.panel)
+        c.started = service.setOption("transition", { mode: "flip" })
+        c.panel.destroy()
+      } },
+      { until: function(c) { return !flip.busy }, ms: 8000 },
+      { sleep: 200 },
+      { run: function(c) {
+        c.after = { optionNotice: service.optionNotice, optionFailed: service.optionFailed }
+        service.dismiss()
+        panelA.opened = true
+        service.attach(panelA)
+      } },
+      { sh: "python3 -c \"import json, os; p = os.environ['FAKE_HYPR_STATE']; s = json.load(open(p)); " +
+            "s['active_workspace'] = 3; json.dump(s, open(p, 'w'))\"" },
+      { log: function(c) { return { started: c.started, after: c.after } } },
+    ] },
+
     // Language picked four times in a row: it ends on the last one, with no
     // step back to an older one on the way.
     { name: "language", steps: [

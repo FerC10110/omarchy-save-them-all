@@ -89,15 +89,19 @@ Scope {
   // action. Every panel that opened is kept too, for dismiss().
   function attach(p) {
     panel = p
-    if (panels.indexOf(p) < 0) panels = panels.filter(function(x) { return !!x }).concat([p])
+    if (panels.indexOf(p) < 0) panels = panels.filter(alive).concat([p])
     flipConnection.check()
     refreshClients()
   }
 
+  // A panel that still exists: one whose monitor was unplugged is destroyed,
+  // and its methods are gone.
+  function alive(p) { return !!p && typeof p.reveal === "function" }
+
   // Hyprflip's handoff: the helper waits until no panel holds the keyboard,
   // so every open one closes, on any monitor, not only the last one shown.
   function dismiss() {
-    panels.forEach(function(p) { if (p && p.opened) p.dismiss() })
+    panels.forEach(function(p) { if (alive(p) && p.opened) p.dismiss() })
   }
 
   function setLanguage(value) {
@@ -318,7 +322,7 @@ Scope {
     // The panel the action came from comes back, even if another opened since.
     var from = (pending && pending.options && pending.options.from) || panel
     var ws = flipConnection.sent && flipConnection.sent.context ? flipConnection.sent.context.workspace : 0
-    if (reopen && from && (!ws || ws === focusedWorkspace)) from.reveal()
+    if (reopen && alive(from) && (!ws || ws === focusedWorkspace)) from.reveal()
     if (optionActions.indexOf(action) >= 0) {
       // message: the helper's own (in the panel's language), or why it failed.
       optionAction = action

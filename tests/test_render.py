@@ -336,6 +336,11 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(self.result('name-only-gone'), {
             'editing': True, 'names': [], 'open': True, 'builderNotice': 'That card changed; look at it again.'})
 
+    def test_a_panel_destroyed_mid_action_is_left_alone(self):
+        # No TypeError either: test_every_scenario_runs_without_qml_errors.
+        self.assertEqual(self.result('panel-gone'), {
+            'started': True, 'after': {'optionNotice': 'Animation updated for every card.', 'optionFailed': False}})
+
     def test_a_hung_snapshot_is_stopped(self):
         r = self.result('watchdog-snapshot')
         self.assertTrue(r['started'])
