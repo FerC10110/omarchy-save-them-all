@@ -219,6 +219,8 @@ class ServiceTest(unittest.TestCase):
                        RENDER_HELPER_DIR=str(helper), FAKE_HYPR_STATE=str(hypr),
                        QT_QPA_PLATFORM='offscreen', QT_QPA_PLATFORMTHEME='', QT_QUICK_BACKEND='software',
                        LIBGL_ALWAYS_SOFTWARE='1', LANG='C.UTF-8', LC_ALL='', LC_MESSAGES='')
+            # Workspace switches go to hyprctl: never the real one.
+            assert shutil.which('hyprctl', path=env['PATH']) == str(FAKES / 'hyprctl')
             try:
                 done = subprocess.run([QUICKSHELL, '-p', str(root), '--no-color'], env=env,
                                       capture_output=True, text=True, timeout=300)
