@@ -22,6 +22,8 @@ var STRINGS = {
     "That card changed; look at it again.": "Esa tarjeta cambió; volvé a mirarla.",
     "Hyprflip asked something this panel cannot answer; the action was cancelled.": "Hyprflip preguntó algo que este panel no sabe responder; se canceló la acción.",
     "The Hyprflip helper stopped. Try again.": "El asistente de Hyprflip se detuvo. Probá de nuevo.",
+    "Hyprflip did not answer in time; the action was stopped.": "Hyprflip no respondió a tiempo; se detuvo la acción.",
+    "Could not start the Hyprflip helper.": "No se pudo iniciar el asistente de Hyprflip.",
     "Workspace": "Escritorio",
     "Workspace %1": "Escritorio %1",
     "No workspace": "Sin escritorio",

@@ -22,6 +22,12 @@ Scope {
 
   readonly property string helper: Quickshell.env("SAVE_THEM_ALL_HYPRFLIP_HELPER")
     || (Quickshell.env("HOME") + "/.local/lib/hyprflip/control.py")
+  property string python: "python3"
+  // How long an action may take before the panel gives up on it: the
+  // snapshot (and workspace switch) that precede it, then the helper's run.
+  // Generous: a run waits for a flip to end or apps to settle.
+  property int snapshotTimeout: 15000
+  property int operationTimeout: 30000
 
   property var status: ({ available: false, reason: "", fix: "", detail: "", hyprland: "", built_for: "", hyprflip: "" })
   property var snapshot: Protocol.emptySnapshot()
@@ -52,6 +58,12 @@ Scope {
   // called: that answer is about a moment before the click, so accept()
   // throws it away and asks again instead of resolving the action against it.
   property bool rerun: false
+  // The helper's run has started and its end is not handled yet (exited, or
+  // the watchdog gave up on it): a late exit after the watchdog is ignored.
+  property bool operating: false
+  // Its exit code and stderr, logged together once both are in.
+  property var helperExit: null
+  property var helperErrors: null
   readonly property bool busy: pending !== null
   readonly property bool checking: statusProcess.running
 
@@ -73,7 +85,9 @@ Scope {
   //   replace    the same, for a create that rebuilds a card
   //   reopen     the caller wants the panel back when it ends
   function run(action, extra, options) {
-    if (busy || !available) return false
+    // operationProcess.running without busy: a helper the watchdog gave up
+    // on has not died yet; starting another now would only queue it.
+    if (busy || !available || operationProcess.running) return false
     pending = { action: action, extra: extra || {}, options: options || {} }
     notice = ""
     failed = false
@@ -81,9 +95,11 @@ Scope {
     refused = false
     sent = null
     // snapshotProcess may already be answering an unrelated refresh (from
-    // attach()/check() or an event); setting `running` again would be a
-    // no-op, so that stale answer would otherwise land in accept() as if it
-    // were fresh. Let it finish, then ask again once it is out of the way.
+    // attach()/check() or an event). Setting `running` again would not
+    // start a fresh one now (Quickshell only queues a restart for when the
+    // current one exits), so that stale answer would still land in accept()
+    // first, as if it were fresh. Let it finish, then ask again once it is
+    // out of the way.
     rerun = snapshotProcess.running
     var ws = pending.options.workspace
     var here = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 0
@@ -93,15 +109,78 @@ Scope {
     } else if (!rerun) {
       snapshotProcess.running = true
     }
+    watchdog.interval = snapshotTimeout
+    watchdog.restart()
     return true
   }
 
   function fail(text) {
+    watchdog.stop()
     var p = pending
     pending = null
     failed = true
     notice = text
     root.finished(p ? p.action : "", false, text, p)
+  }
+
+  // The action took too long (a helper, snapshot or switch that hangs, or
+  // never started): stop what still runs, say so, and let the panel go on.
+  function giveUp() {
+    if (!pending) return
+    if (operationProcess.running) {
+      root.write({ cancel: true })
+      operationProcess.signal(15)
+      killTimer.restart()
+    }
+    // A killed snapshot still prints what it had: accept() drops it.
+    if (snapshotProcess.running) {
+      rerun = true
+      snapshotProcess.signal(9)
+    }
+    if (switchProcess.running) switchProcess.signal(9)
+    operating = false
+    fail(t("Hyprflip did not answer in time; the action was stopped."))
+    Qt.callLater(refresh)
+  }
+
+  // The helper's run is over (exitCode null: it never started).
+  function stopped(exitCode) {
+    if (!operating) return
+    operating = false
+    watchdog.stop()
+    cancelTimer.stop()
+    var p = pending
+    pending = null
+    if (exitCode === null) {
+      failed = true
+      notice = t("Could not start the Hyprflip helper.")
+    } else if (!completed && !refused) {
+      failed = true
+      notice = t("The Hyprflip helper stopped. Try again.")
+      helperExit = exitCode
+      logHelperExit()
+    }
+    root.finished(p ? p.action : "", !failed, notice, p)
+    Qt.callLater(refresh)
+  }
+
+  // Nothing runs for a pending action and it is not at the helper yet: the
+  // snapshot or workspace switch it waited on could not even start (they
+  // never exit then). Checked a moment after `running` drops, so a restart
+  // Quickshell queued (the stale-snapshot rerun) has had time to begin.
+  function checkStuck(switching) {
+    if (!pending || operating || snapshotProcess.running || switchProcess.running) return
+    if (switching) fail(t("Could not switch to workspace %1.", [pending.options.workspace]))
+    else fail(t("Could not start the Hyprflip helper."))
+  }
+
+  // An unexpected exit, logged with the helper's stderr once that stream has
+  // been read to its end (it can finish before or after the exit).
+  function logHelperExit() {
+    if (helperExit === null || helperErrors === null) return
+    console.warn("[save-them-all] helper exit " + helperExit + ": " + String(helperErrors).slice(0, 2000))
+    helperExit = null
+    helperErrors = null
   }
 
   // The fresh target of a card the panel showed, or null if it changed.
@@ -142,7 +221,12 @@ Scope {
       if (!extra.replace) { fail(t("That card changed; look at it again.")); return }
     }
     sent = Protocol.request(pending.action, snapshot.context, extra)
-    operationProcess.command = ["python3", helper, "run", "--request", JSON.stringify(sent)]
+    operationProcess.command = [python, helper, "run", "--request", JSON.stringify(sent)]
+    helperExit = null
+    helperErrors = null
+    operating = true
+    watchdog.interval = operationTimeout
+    watchdog.restart()
     operationProcess.running = true
   }
 
@@ -151,6 +235,8 @@ Scope {
   }
 
   function receive(line) {
+    // Whatever a helper the watchdog gave up on still says is too late.
+    if (!operating) return
     var r = Protocol.receive(line)
     if (r.kind === "blank" || r.kind === "opening") return
     if (r.kind === "handoff") {
@@ -195,35 +281,35 @@ Scope {
 
   Process {
     id: snapshotProcess
-    command: ["python3", root.helper, "snapshot"]
+    command: [root.python, root.helper, "snapshot"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.accept(text)
     }
+    onRunningChanged: if (!running) { stuckTimer.switching = false; stuckTimer.restart() }
   }
 
   Process {
     id: switchProcess
     onExited: if (root.pending) snapshotProcess.running = true
+    onRunningChanged: if (!running) { stuckTimer.switching = true; stuckTimer.restart() }
   }
 
   Process {
     id: operationProcess
     stdinEnabled: true
     stdout: SplitParser { onRead: function(data) { root.receive(data) } }
-    stderr: StdioCollector { id: operationErrors; waitForEnd: true }
-    onExited: function(exitCode) {
-      cancelTimer.stop()
-      var p = root.pending
-      root.pending = null
-      if (!root.completed && !root.refused) {
-        root.failed = true
-        root.notice = root.t("The Hyprflip helper stopped. Try again.")
-        console.warn("[save-them-all] helper exit " + exitCode + ": " + operationErrors.text.slice(0, 2000))
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.helperErrors = String(text || "")
+        root.logHelperExit()
       }
-      root.finished(p ? p.action : "", !root.failed, root.notice, p)
-      Qt.callLater(root.refresh)
     }
+    onExited: function(exitCode) { root.stopped(exitCode) }
+    // A command that cannot start never exits: running just drops back to
+    // false (after exited() when it did run, so this finds it handled).
+    onRunningChanged: if (!running) Qt.callLater(function() { root.stopped(null) })
   }
 
   // A helper that ignores the cancel is stopped; it is our own child process.
@@ -231,6 +317,25 @@ Scope {
     id: cancelTimer
     interval: 9000
     onTriggered: if (operationProcess.running) operationProcess.signal(15)
+  }
+
+  // One that ignores SIGTERM too, after the watchdog gave up on it.
+  Timer {
+    id: killTimer
+    interval: 3000
+    onTriggered: if (operationProcess.running) operationProcess.signal(9)
+  }
+
+  Timer {
+    id: watchdog
+    onTriggered: root.giveUp()
+  }
+
+  Timer {
+    id: stuckTimer
+    property bool switching: false
+    interval: 250
+    onTriggered: root.checkStuck(switching)
   }
 
   Timer { id: eventRefresh; interval: 180; onTriggered: root.refresh() }

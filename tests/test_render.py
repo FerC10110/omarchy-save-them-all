@@ -150,3 +150,163 @@ class RenderTest(unittest.TestCase):
             texts = self.pages[name][1]
             for text in unshown:
                 self.assertFalse(any(text in t for t in texts), f'{name}: {text!r} found in {texts}')
+
+
+CARDS_STUB = r'''#!/bin/sh
+# bin/cards as the service harness needs it: status says Hyprflip is fine,
+# name is logged, ungroup fails while ungroup-fails exists.
+case "$1" in
+  status) echo '{"available": true, "reason": "ok", "hyprflip": "0.3.0", "hyprland": "0.56.2"}' ;;
+  name) shift; printf '%s\n' "$*" >> "$RENDER_HELPER_DIR/names.log" ;;
+  ungroup)
+    if [ -e "$RENDER_HELPER_DIR/ungroup-fails" ]; then
+      echo "cards: Algunas ventanas siguen en un grupo; probá de nuevo" >&2
+      exit 1
+    fi ;;
+esac
+'''
+
+
+@unittest.skipUnless(QUICKSHELL and SHELL.is_dir(), 'needs quickshell and the Omarchy shell')
+class ServiceTest(unittest.TestCase):
+    """Service.qml and Hyprflip.qml themselves, driven by the scenarios of
+    tests/render-service.qml against tests/render-helper.py, a stub bin/cards
+    and tests/fakes/hyprctl."""
+
+    @classmethod
+    def setUpClass(cls):
+        with tempfile.TemporaryDirectory(prefix='save-them-all-service-') as directory:
+            root = Path(directory)
+            for name in ('Ui', 'Commons'):
+                (root / name).symlink_to(SHELL / name)
+            plugin = root / 'SaveThemAll'
+            (plugin / 'bin').mkdir(parents=True)
+            for source in [*ROOT.glob('*.qml'), *ROOT.glob('*.js')]:
+                shutil.copy2(source, plugin / source.name)
+            (plugin / 'bin' / 'cards').write_text(CARDS_STUB)
+            (plugin / 'bin' / 'restore-them-all-at-login').write_text('#!/bin/sh\nexit 0\n')
+            for stub in (plugin / 'bin').iterdir():
+                stub.chmod(0o755)
+            shutil.copy2(ROOT / 'tests/render-service.qml', root / 'shell.qml')
+            helper = root / 'helper'
+            helper.mkdir()
+            shutil.copy2(ROOT / 'tests/render-helper.py', root / 'control.py')
+            (helper / 'cards.json').write_text(json.dumps([{
+                'id': 1, 'kind': 'container', 'key': 'container:1', 'token': 't1', 'current': '0x5', 'active': 0,
+                'unfolded': False, 'floating': False, 'workspace': 3, 'name': '',
+                'faces': [{'index': 0, 'axis': 'horizontal', 'panes': [{'address': '0x5', 'label': 'e'}]},
+                          {'index': 1, 'axis': 'horizontal', 'panes': [{'address': '0x6', 'label': 'f'}]}]}]))
+            hypr = root / 'hypr.json'
+            hypr.write_text(json.dumps({'active_workspace': 3, 'clients': [
+                {'address': f'0x{n}', 'class': f'app{n}', 'initialClass': f'app{n}', 'title': f'app{n}',
+                 'at': [n * 100, 0], 'size': [100, 100], 'floating': False, 'workspace': {'id': 3, 'name': '3'},
+                 'mapped': True, 'hidden': False, 'grouped': [], 'fullscreen': 0, 'pinned': False,
+                 'focusHistoryID': n, 'monitor': 0} for n in range(1, 7)]}))
+            for name in ('runtime', 'config', 'cache', 'state'):
+                (root / name).mkdir(mode=0o700)
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ('WAYLAND_DISPLAY', 'DISPLAY', 'HYPRLAND_INSTANCE_SIGNATURE')}
+            env.update(PATH=f'{FAKES}:{os.environ["PATH"]}', XDG_RUNTIME_DIR=str(root / 'runtime'),
+                       XDG_CONFIG_HOME=str(root / 'config'), XDG_CACHE_HOME=str(root / 'cache'),
+                       HOME=str(root), SAVE_THEM_ALL_STATE=str(root / 'state'),
+                       SAVE_THEM_ALL_RUNTIME=str(root / 'runtime' / 'save-them-all'),
+                       SAVE_THEM_ALL_HYPRFLIP_HELPER=str(root / 'control.py'),
+                       RENDER_HELPER_DIR=str(helper), FAKE_HYPR_STATE=str(hypr),
+                       QT_QPA_PLATFORM='offscreen', QT_QPA_PLATFORMTHEME='', QT_QUICK_BACKEND='software',
+                       LIBGL_ALWAYS_SOFTWARE='1', LANG='C.UTF-8', LC_ALL='', LC_MESSAGES='')
+            try:
+                done = subprocess.run([QUICKSHELL, '-p', str(root), '--no-color'], env=env,
+                                      capture_output=True, text=True, timeout=300)
+                cls.returncode, cls.log = done.returncode, done.stdout + done.stderr
+            except subprocess.TimeoutExpired as late:
+                text = lambda b: b.decode(errors='replace') if isinstance(b, bytes) else (b or '')
+                cls.returncode, cls.log = 'timeout', text(late.stdout) + text(late.stderr)
+        if os.environ.get('SAVE_THEM_ALL_SERVICE_LOG'):
+            Path(os.environ['SAVE_THEM_ALL_SERVICE_LOG']).write_text(cls.log)
+        cls.results = {}
+        for line in cls.log.splitlines():
+            if 'SERVICE_RESULT ' in line:
+                name, value = line.split('SERVICE_RESULT ', 1)[1].split(' ', 1)
+                cls.results[name] = json.loads(value)
+
+    def result(self, name):
+        self.assertIn(name, self.results, self.log)
+        return self.results[name]
+
+    def test_every_scenario_runs_without_qml_errors(self):
+        self.assertEqual(self.returncode, 0, self.log)
+        self.assertIn('SERVICE_DONE', self.log)
+        self.assertNotIn('SERVICE_STUCK', self.log)
+        self.assertNotIn('SERVICE_STEP_FAILED', self.log)
+        problems = [line for line in self.log.splitlines()
+                    if any(p in line for p in PROBLEMS) and not any(a in line for a in ALLOWED)]
+        self.assertEqual(problems, [])
+        self.assertEqual(self.result('settle'), {'settled': True, 'available': True, 'cards': 1})
+
+    def test_pick_on_screen(self):
+        r = self.result('pick')
+        # The overlay refused to come up: the builder is back, and says why.
+        self.assertEqual(r['refused'], {'picking': False, 'builderNotice': 'Could not open pick on screen.',
+                                        'revealed': 1, 'opened': True})
+        # Picking: the panel steps aside, its notice waits for the way back.
+        self.assertEqual(r['started'], {'picking': True, 'builderNotice': '', 'dismissed': 1,
+                                        'faces': [['0x1'], ['0x2']]})
+        # Enter: the picks (a click on a picked window takes it out) go back.
+        self.assertEqual(r['applied'], {'picking': False, 'faces': [['0x1', '0x3'], ['0x4']],
+                                        'builderNotice': '', 'revealed': 1})
+        # Esc: the builder as it was, notice included.
+        self.assertEqual(r['cancelled'], {'picking': False, 'faces': [['0x1', '0x3'], ['0x4']],
+                                          'builderNotice': 'kept'})
+
+    def test_a_refresh_that_closes_nothing_leaves_the_pick_alone(self):
+        self.assertEqual(self.result('prune-quiet'), {'picking': True, 'changes': 0})
+
+    def test_helper_messages_follow_the_language(self):
+        r = self.result('english')
+        self.assertEqual(r['error'], {'busy': False, 'failed': True, 'notice': 'Wait for the flip to finish and try again.'})
+        self.assertEqual(r['unknown'], {'busy': False, 'failed': False, 'notice': 'Algo que el asistente dice ahora.'})
+        self.assertEqual(r['spanish'], {'busy': False, 'failed': False,
+                                        'notice': 'Animación actualizada para todas las tarjetas.'})
+
+    def test_a_hung_helper_is_stopped(self):
+        r = self.result('watchdog-operation')
+        self.assertTrue(r['started'])
+        stopped = r['stopped']
+        self.assertEqual((stopped['busy'], stopped['failed']), (False, True))
+        self.assertEqual(stopped['notice'], 'Hyprflip did not answer in time; the action was stopped.')
+        self.assertLess(stopped['seconds'], 3)
+        self.assertEqual(r['after'], {'busy': False, 'failed': False, 'notice': 'Animation updated for every card.'})
+
+    def test_a_hung_snapshot_is_stopped(self):
+        r = self.result('watchdog-snapshot')
+        self.assertTrue(r['started'])
+        stopped = r['stopped']
+        self.assertEqual((stopped['busy'], stopped['failed']), (False, True))
+        self.assertEqual(stopped['notice'], 'Hyprflip did not answer in time; the action was stopped.')
+        self.assertLess(stopped['seconds'], 3)
+        self.assertEqual(r['after'], {'busy': False, 'failed': False, 'notice': 'Animation updated for every card.',
+                                      'available': True})
+
+    def test_a_helper_that_cannot_start_does_not_stay_busy(self):
+        r = self.result('spawn-failure')
+        self.assertTrue(r['started'])
+        stopped = r['stopped']
+        self.assertEqual((stopped['busy'], stopped['failed']), (False, True))
+        self.assertEqual(stopped['notice'], 'Could not start the Hyprflip helper.')
+        self.assertLess(stopped['seconds'], 3)
+        self.assertEqual(r['after'], {'busy': False, 'failed': False, 'notice': 'Animation updated for every card.'})
+
+    def test_a_run_that_cannot_start_does_not_stay_busy(self):
+        r = self.result('spawn-failure-run')
+        self.assertTrue(r['started'])
+        stopped = r['stopped']
+        self.assertEqual((stopped['busy'], stopped['failed']), (False, True))
+        self.assertEqual(stopped['notice'], 'Could not start the Hyprflip helper.')
+        # After the (slow) snapshot answered: it was the run that failed.
+        self.assertGreaterEqual(stopped['seconds'], 0.45)
+        self.assertLess(stopped['seconds'], 3)
+
+    def test_a_helper_crash_logs_its_whole_stderr(self):
+        r = self.result('crash')
+        self.assertEqual(r['stopped'], {'busy': False, 'failed': True, 'notice': 'The Hyprflip helper stopped. Try again.'})
+        self.assertIn('helper exit 3: BOOM-MARKER the helper fell over', self.log)
