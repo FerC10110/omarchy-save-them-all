@@ -14,7 +14,9 @@
   English.
 - With a panel on each monitor, handing the focus to Hyprflip closes all of
   them. Fast language changes no longer flip back to an earlier one.
-- **Show both faces** says when it worked.
+- **Show both faces** says when it worked. A card made or taken apart whose
+  windows could not go back where they were says so, instead of a plain
+  success.
 - A card's name from the builder goes to that card only, not to one made later
   with the same windows. A builder left open in a closed panel stops refreshing
   windows and thumbnails. The builder notices cards made or taken apart
