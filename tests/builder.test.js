@@ -189,3 +189,12 @@ test("editDraft loads a native pair as a one-and-one draft that replaces it", ()
   assert.equal(Builder.reason(win("0x7", "b", 3, { grouped: ["0x6", "0x7"], hidden: true }), ctx, t), "")
   assert.equal(Builder.reason(win("0x2", "a", 3), ctx, t), "Already in a card")
 })
+
+test("contextKey changes when the cards (or floating support) change, not on a rebuilt copy", () => {
+  const d = Builder.newDraft(3)
+  const a = Builder.contextKey(Builder.context([CARD], d, {}))
+  assert.equal(a, Builder.contextKey(Builder.context(JSON.parse(JSON.stringify([CARD])), d, {})))
+  // The card was taken apart: its windows are free, so the list must say so.
+  assert.notEqual(a, Builder.contextKey(Builder.context([], d, {})))
+  assert.notEqual(a, Builder.contextKey(Builder.context([CARD], d, { floating_members: true })))
+})

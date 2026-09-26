@@ -63,6 +63,14 @@ function context(cards, draft, capabilities) {
   return { owned: owned, own: own, floatingOk: !!(capabilities && capabilities.floating_members) }
 }
 
+// A stable key for what context() says: which windows are taken, which
+// are the edited card's own, and whether floating windows may join. The
+// builder rebuilds its window list when this changes (a card made or taken
+// apart elsewhere), not on every snapshot, which is a new object each time.
+function contextKey(ctx) {
+  return ctx ? JSON.stringify([Object.keys(ctx.owned).sort(), Object.keys(ctx.own).sort(), ctx.floatingOk]) : ""
+}
+
 // Why a window cannot join the card, or "".
 function reason(win, ctx, t) {
   var mine = ctx.own[win.address] === true
@@ -219,7 +227,7 @@ function submitText(draft, t) {
 if (typeof module !== "undefined") {
   module.exports = { MAX_PER_SIDE: MAX_PER_SIDE, newDraft: newDraft, editDraft: editDraft, faceOf: faceOf,
                      facesKey: facesKey, faceKey: faceKey,
-                     context: context, reason: reason, candidates: candidates, place: place, remove: remove,
+                     context: context, contextKey: contextKey, reason: reason, candidates: candidates, place: place, remove: remove,
                      setAxis: setAxis, prune: prune, ready: ready, request: request, movesFrom: movesFrom,
                      twinWords: twinWords, wordText: wordText, label: label, slotAspect: slotAspect,
                      submitText: submitText }

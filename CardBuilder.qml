@@ -16,13 +16,14 @@ Item {
   readonly property bool typing: nameField.activeFocus
   readonly property var ctx: Builder.context(service.flip.snapshot.cards, draft, service.flip.snapshot.capabilities)
   // The window list's model. Rebuilt only when what it actually shows can
-  // differ (the draft's faces, the client list, or the language) — not on
+  // differ (the draft's faces, the client list, the language, or which
+  // windows other cards hold, e.g. "Already in a card") — not on
   // every draft reassignment: a cursor move or a name keystroke also
   // replaces `draft` as a whole (Service.qml keeps it immutable), and
   // Builder.candidates() always returns brand new objects, so binding
   // `groups` straight to `draft` would tear down and rebuild every
   // WindowTile (and its live thumbnail) on each keypress.
-  readonly property string groupsKey: draft ? Builder.facesKey(draft) + "\u0000" + service.lang : ""
+  readonly property string groupsKey: draft ? Builder.facesKey(draft) + "\u0000" + service.lang + "\u0000" + Builder.contextKey(ctx) : ""
   property var groups: []
   function refreshGroups() { groups = draft ? Builder.candidates(service.clients, draft, ctx, host.t) : [] }
   onGroupsKeyChanged: refreshGroups()
