@@ -19,7 +19,27 @@ Item {
   readonly property var draft: service.pickDraft
   readonly property int face: service.pickFace
   readonly property var ctx: Builder.context(service.flip.snapshot.cards, draft, service.flip.snapshot.capabilities)
-  readonly property var rects: Pick.rects(service.clients, workspace, origin)
+  // The outlines' model, replaced only when a rect really changes (like
+  // CardBuilder's groups): service.clients is a new array on every refresh
+  // (a title or focus change) and Pick.rects() always builds new objects,
+  // so binding the Repeater to it straight would redraw every outline on
+  // each refresh, hover state included.
+  property var rects: []
+  property string rectsKey: ""
+  function refreshRects() {
+    var next = Pick.rects(service.clients, workspace, origin)
+    var key = JSON.stringify(next)
+    if (key === rectsKey) return
+    rectsKey = key
+    rects = next
+  }
+  onWorkspaceChanged: refreshRects()
+  onOriginChanged: refreshRects()
+  Component.onCompleted: refreshRects()
+  Connections {
+    target: view.service
+    function onClientsChanged() { view.refreshRects() }
+  }
   readonly property int count: draft ? draft.faces[0].length + draft.faces[1].length : 0
   property string hovered: ""
   focus: true
