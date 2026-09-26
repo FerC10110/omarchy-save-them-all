@@ -47,8 +47,19 @@ class RebuildTest(ScriptTest):
 
     def test_second_rebuild_keeps_the_card(self):
         self.rebuild()
+        before = len(self.dispatches())
         self.assertEqual(self.rebuild(), {'built': 0, 'kept': 1, 'notes': []})
         self.assertEqual(len(self.helper_requests()), 1)
+        self.assertEqual(self.dispatches()[before:], [])
+
+    def test_a_back_window_in_another_card_is_left_alone(self):
+        state = self.hypr()
+        state['hyprflip']['containers'] = [container(5, [['0x4'], ['0x9']])]
+        self.hypr_state(**state)
+        out = self.rebuild()
+        self.assertEqual(out['notes'], ['Card Calculator ↔ Obsidian + weird was left as it is: weird is already in a card or group'])
+        self.assertEqual(self.helper_requests(), [])
+        self.assertEqual(self.dispatches(), [])
 
     def test_a_live_native_pair_of_the_same_windows_is_kept(self):
         state = self.hypr()

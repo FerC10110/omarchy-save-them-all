@@ -51,6 +51,27 @@ class FallbackTest(ScriptTest):
         self.assertEqual(d[:2], ["hl.dsp.focus({ window = 'address:0x2' })", 'hl.dsp.group.toggle()'])
         self.assertEqual(d.count("hl.dsp.window.move({ into_group = 'l' })"), 2)
 
+    def test_each_other_window_goes_through_the_parking_workspace_into_the_group(self):
+        self.fallback([card([1], [2, 3])])
+        park = "hl.dsp.window.move({ window = 'address:%s', workspace = 'special:savethemall', follow = false })"
+        back = "hl.dsp.window.move({ window = 'address:%s', workspace = '3', follow = false })"
+        focus = "hl.dsp.focus({ window = 'address:%s' })"
+        join = ["hl.dsp.layout('preselect r')", "hl.dsp.window.move({ into_group = 'l' })"]
+        self.assertEqual(self.dispatches(), [
+            focus % '0x2', 'hl.dsp.group.toggle()',
+            park % '0x3', focus % '0x2', join[0], back % '0x3', focus % '0x3', join[1],
+            park % '0x4', focus % '0x3', join[0], back % '0x4', focus % '0x4', join[1],
+            'hl.dsp.group.active({ index = 1 })'])
+        self.assertEqual({a: c['workspace']['id'] for a, c in self.clients_by_address().items()},
+                         {'0x1': 3, '0x2': 3, '0x3': 3, '0x4': 3})
+
+    def test_a_back_window_in_another_group_is_left_alone(self):
+        grouped = [client('0x1', 'kitty'), client('0x2', 'org.gnome.Calculator'),
+                   client('0x3', 'obsidian', grouped=['0x3', '0x9']), client('0x4', 'weird')]
+        out = self.fallback([card([1], [2])], clients=grouped)
+        self.assertEqual(out['notes'], ['Card Calculator ↔ Obsidian was left as it is: Obsidian is already in a card or group'])
+        self.assertEqual(self.dispatches(), [])
+
     def test_the_visible_back_comes_to_the_front(self):
         self.fallback([card([1], [2, 3], visible=1)])
         c = self.clients_by_address()

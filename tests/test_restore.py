@@ -1,6 +1,10 @@
 """Restoring a workspace rebuilds its cards after the windows, and never lets
 a card stop the windows from coming back."""
-from scripttest import ScriptTest, client, flip, saved_window
+import os
+import shutil
+import subprocess
+
+from scripttest import BIN, ScriptTest, client, flip, saved_window
 
 TERMINAL = {'kind': 'terminal'}
 CALC = {'kind': 'app', 'desktop': 'org.gnome.Calculator.desktop'}
@@ -87,6 +91,11 @@ class RestoreCardsTest(ScriptTest):
         self.assertEqual(title, 'Windows restored on workspace 3, cards with notes')
         self.assertIn('Cards in workspace-3.json were ignored: card 1 needs exactly two sides', body)
         self.assertEqual(self.helper_requests(), [])
+        # 0x3 is a plain tile, not a card's other side: parked once, by the
+        # tree step, and back on the workspace, in no group.
+        self.assertEqual(self.dispatches().count(PARK % '0x3'), 1)
+        self.assertEqual(self.clients_by_address()['0x3']['workspace']['id'], 3)
+        self.assertEqual(self.clients_by_address()['0x3']['grouped'], [])
 
     def test_a_floating_slot_of_a_tiled_card_is_tiled_like_its_card(self):
         # Hand-edited: the card is not floating but its slot window says
@@ -144,6 +153,30 @@ class RestoreCardsTest(ScriptTest):
                 self.assertIn('Cards in workspace-3.json were ignored: cards must be a list', body)
                 self.assertIn('cards must be a list', (self.state_dir / 'restore.log').read_text())
                 self.assertEqual(self.helper_requests(), [])
+
+    def test_bin_cards_itself_failing_is_noted(self):
+        # A copy of bin/ whose cards answers layout and status but fails at
+        # rebuild and fallback, as a crash would.
+        copy = self.tmp / 'bin'
+        shutil.copytree(BIN, copy)
+        (copy / 'cards').rename(copy / 'cards.real')
+        (copy / 'cards').write_text('#!/bin/bash\n'
+                                    'case $1 in rebuild|fallback) echo "cards: boom" >&2; exit 1 ;; esac\n'
+                                    'exec "$(dirname "$0")/cards.real" "$@"\n')
+        os.chmod(copy / 'cards', 0o755)
+        for with_flip in (True, False):
+            with self.subTest(with_flip=with_flip):
+                self.log_path.write_text('')
+                self.fresh_session(with_flip=with_flip)
+                r = subprocess.run([str(copy / 'restore-them-all'), '--quiet'], env=self.env,
+                                   capture_output=True, text=True, timeout=120)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                log = self.state_dir / 'restore.log'
+                title, body = self.notifications()[-1]
+                self.assertEqual(title, 'Windows restored on workspace 3, cards with notes')
+                self.assertIn(f'Cards were not rebuilt: see {log}', body)
+                self.assertIn('cards: boom', log.read_text())
+                self.assertEqual(self.clients_by_address()['0x3']['workspace']['id'], 3)
 
     def test_restore_survives_failing_cards(self):
         self.fresh_session()

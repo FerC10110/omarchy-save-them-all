@@ -192,6 +192,26 @@ class SaveCardsTest(ScriptTest):
         self.assertEqual(self.helper_snapshots(), 1)
         self.assertEqual(len(self.saved(3)['cards']), 1)
 
+    def test_preserve_moves_a_card_onto_shifted_indices(self):
+        # A new window saved first shifts every index: the card follows its
+        # windows (same class and launcher, in order), not their old numbers.
+        windows = [saved_window('kitty', (0, 0), (960, 1080), TERMINAL),
+                   saved_window('org.gnome.Calculator', (960, 0), (960, 1080), CALC),
+                   saved_window('obsidian', (960, 0), (960, 1080), OBSIDIAN)]
+        card = {'name': 'Notes', 'faces': [{'windows': [2], 'axis': 'row', 'ratios': [1.0]},
+                                           {'windows': [1], 'axis': 'row', 'ratios': [1.0]}],
+                'visible': 1, 'floating': None}
+        previous = self.write_saved(3, windows, cards=[card])
+        now = [saved_window('firefox', (0, 0), (480, 1080), {'kind': 'browser'}),
+               saved_window('kitty', (0, 0), (960, 1080), TERMINAL),
+               saved_window('kitty', (480, 0), (480, 1080), TERMINAL),
+               saved_window('obsidian', (960, 0), (960, 1080), OBSIDIAN),
+               saved_window('org.gnome.Calculator', (960, 0), (960, 1080), CALC)]
+        out = self.cards_json('preserve', '--previous', str(previous), '--windows', json.dumps(now))
+        self.assertEqual(out['cards'], [dict(card, faces=[dict(card['faces'][0], windows=[3]),
+                                                          dict(card['faces'][1], windows=[4])])])
+        self.assertEqual(out['notes'], [])
+
     def test_login_list_counts_cards(self):
         card = {'faces': [{'windows': [0]}, {'windows': [1]}]}
         self.write_saved(3, [saved_window('a', (0, 0), (1, 1), None), saved_window('b', (1, 0), (1, 1), None)],
