@@ -98,9 +98,13 @@ Column {
     return true
   }
 
+  // Whether a row can be picked now: the same for the mouse (ChoiceRow's
+  // enabled) and Enter, so the keyboard cannot reach what the mouse cannot.
+  function rowEnabled(row) { return !flip.busy || row.section === "language" }
+
   function activate() {
     var row = rows.find(function(r) { return r.id === cursor })
-    if (row) choose(row)
+    if (row && rowEnabled(row)) choose(row)
   }
 
   Repeater {
@@ -129,7 +133,7 @@ Column {
         cursorHere: tab.cursor === entry.modelData.id
         textColor: host.foreground
         fontFamily: host.fontFamily
-        enabled: !tab.flip.busy || entry.modelData.section === "language"
+        enabled: tab.rowEnabled(entry.modelData)
         onActivated: { tab.cursor = entry.modelData.id; tab.choose(entry.modelData) }
       }
     }

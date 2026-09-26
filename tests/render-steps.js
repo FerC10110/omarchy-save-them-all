@@ -54,6 +54,16 @@ var STEPS = [
   { name: "settings-failed-es", page: "SettingsTab.qml", lang: "es",
     patch: { failed: true, notice: "Hyprflip está ocupado; probá de nuevo en un momento." } },
   { name: "shortcuts-busy-en", page: "ShortcutsPage.qml", lang: "en", patch: { busy: true } },
+  // Enter picked "flip"; j then must not walk the highlight off the row that
+  // Enter (and Save) act on while it is selected.
+  { name: "shortcuts-selected-move-en", page: "ShortcutsPage.qml", lang: "en", patch: {},
+    calls: [["activate"], ["move", 0, 1]], state: ["cursor", "selectedId"],
+    expect: { calls: [], state: { cursor: "flip", selectedId: "flip" } } },
+  // While Hyprflip is busy the mouse cannot pick a Hyprflip row; Enter must
+  // not either. Language rows stay live for both.
+  { name: "settings-busy-keys-en", page: "SettingsTab.qml", lang: "en", patch: { busy: true },
+    calls: [["move", 0, 3], ["activate"], ["move", 0, -2], ["activate"]], state: ["cursor"],
+    expect: { calls: [["setLanguage", "en"]], state: { cursor: "language:en" } } },
   { name: "pick-es", page: "PickView.qml", lang: "es",
     patch: { pickFace: 0, draft: { mode: "create", card: null, workspace: 3, faces: [["0x1"], ["0x4"]], axes: ["row", "row"],
                                    visible: 0, floating: null, name: "", cursor: "0x4" } } },
