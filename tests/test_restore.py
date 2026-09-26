@@ -119,6 +119,32 @@ class RestoreCardsTest(ScriptTest):
         # nothing stays hidden: the back came back to the tree
         self.assertEqual(self.clients_by_address()['0x3']['workspace']['id'], 3)
 
+    def test_focus_back_does_not_flip_the_card_to_its_hidden_side(self):
+        # The window focused before restoring is on the card's front, but the
+        # card was saved showing its back: giving the focus back to it would
+        # flip the card (Hyprflip, or a group's tab) to the wrong side.
+        back = dict(CARD, visible=1)
+        for with_flip in (True, False):
+            with self.subTest(with_flip=with_flip):
+                self.fresh_session(with_flip=with_flip, cards=(back,))
+                state = self.hypr()
+                state['active'] = '0x2'
+                self.hypr_state(**state)
+                r = self.run_script('restore-them-all', '--quiet')
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertNotEqual(self.dispatches()[-1], "hl.dsp.focus({ window = 'address:0x2' })")
+                if not with_flip:
+                    self.assertEqual(self.clients_by_address()['0x3']['hidden'], False)
+
+    def test_focus_goes_back_to_a_window_outside_the_cards(self):
+        self.fresh_session(cards=(dict(CARD, visible=1),))
+        state = self.hypr()
+        state['active'] = '0x1'
+        self.hypr_state(**state)
+        r = self.run_script('restore-them-all', '--quiet')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.dispatches()[-1], "hl.dsp.focus({ window = 'address:0x1' })")
+
     def test_cards_step_refocuses_the_saved_workspace_first(self):
         # bin/cards rebuild/fallback act on whatever workspace is active
         # right now (Hyprflip's own context, or active_workspace()); step 1

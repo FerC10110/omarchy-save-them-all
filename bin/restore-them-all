@@ -535,8 +535,17 @@ for i in "${!entries[@]}"; do
   fi
 done
 
-# Give focus back to where it was, if that window is still on the workspace.
-if [[ -n $active_before ]] && clients_on_ws | jq -e --arg a "$active_before" 'any(.[]; .address == $a)' >/dev/null; then
+# Give focus back to where it was, if that window is still on the workspace --
+# unless it is on the side a saved card does not show: focusing it would flip
+# the card (or bring its tab forward) to the wrong side.
+off_side=""
+if [[ $has_cards == yes ]]; then
+  off_side=$(jq -r --argjson a "$addresses" '
+    .cards[] | .visible as $v | .faces | to_entries[] | select(.key != $v)
+    | .value.windows[] | $a[.] // empty' "$file" 2>/dev/null || true)
+fi
+if [[ -n $active_before ]] && ! grep -qx -- "$active_before" <<<"$off_side" \
+   && clients_on_ws | jq -e --arg a "$active_before" 'any(.[]; .address == $a)' >/dev/null; then
   dispatch "hl.dsp.focus({ window = 'address:$active_before' })"
 fi
 
