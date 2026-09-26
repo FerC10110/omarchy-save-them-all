@@ -256,6 +256,17 @@ Scope {
 
   function submitDraft() {
     if (!draft) return
+    // Only the name changed: rename the card; rebuilding it would reset its
+    // layout for nothing.
+    if (Builder.nameOnly(draft)) {
+      setName(draft.card.id, draft.name)
+      cardsNotice = t("Changes saved.")
+      cardsFailed = false
+      draft = null
+      builderNotice = ""
+      if (panel) panel.openHome()
+      return
+    }
     if (!Builder.ready(draft)) { builderNotice = t("Put at least one window on each side."); return }
     if (flipConnection.busy) { builderNotice = t("Hyprflip is busy; try again in a moment."); return }
     if (!flipConnection.canCreate) { builderNotice = flipConnection.unavailableText || t("The card could not be made."); return }

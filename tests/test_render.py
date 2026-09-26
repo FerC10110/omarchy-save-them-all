@@ -345,3 +345,10 @@ class ServiceTest(unittest.TestCase):
         # The second create's card never showed up in time; when the same
         # windows became a card later, it did not get "Late".
         self.assertEqual(r['late'], ['--id 2 --name Work'])
+
+    def test_a_name_only_edit_renames_without_rebuilding(self):
+        r = self.result('name-only')
+        self.assertTrue(r['editing'])
+        self.assertEqual(r['sent'], 0)
+        self.assertEqual(r['names'], ['--id 2 --name Renamed'])
+        self.assertEqual((r['draft'], r['notice'], r['page']), (None, 'Changes saved.', 'cards'))

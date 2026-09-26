@@ -348,6 +348,26 @@ ShellRoot {
       { run: function(c) { service.nameTimeout = 15000 } },
       { log: function(c) { return { made: harness.lines(c.made), late: harness.lines(c.late), notice: service.cardsNotice } } },
     ] },
+
+    // Editing only the name renames the card; nothing is rebuilt.
+    { name: "name-only", steps: [
+      { sh: ": > names.log" },
+      { read: "requests.jsonl", into: "before" },
+      { run: function(c) {
+        service.startBuilder(harness.card(2))
+        service.setDraftName("Renamed")
+        c.editing = service.draft !== null
+        service.submitDraft()
+      } },
+      { sleep: 800 },
+      { read: "requests.jsonl", into: "after" },
+      { read: "names.log", into: "names" },
+      { log: function(c) {
+        return { editing: c.editing, sent: harness.lines(c.after).length - harness.lines(c.before).length,
+                 names: harness.lines(c.names), draft: service.draft, notice: service.cardsNotice,
+                 page: panelA.page }
+      } },
+    ] },
   ]
 
   property int scenario: -1
