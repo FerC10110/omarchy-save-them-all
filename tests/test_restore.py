@@ -88,6 +88,20 @@ class RestoreCardsTest(ScriptTest):
         self.assertIn('Cards in workspace-3.json were ignored: card 1 needs exactly two sides', body)
         self.assertEqual(self.helper_requests(), [])
 
+    def test_missing_windows_and_card_notes_are_told_together(self):
+        self.write_saved(3, WINDOWS + [saved_window('ghostapp', (0, 600), (960, 480), None)], cards=[{'faces': 'bad'}])
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip(), clients=[
+            client('0x1', 'kitty', at=(0, 0), size=(600, 600)),
+            client('0x2', 'org.gnome.Calculator', at=(600, 0), size=(600, 600)),
+            client('0x3', 'obsidian', at=(1200, 0), size=(600, 600))])
+        r = self.run_script('restore-them-all', '--quiet')
+        self.assertEqual(r.returncode, 1)
+        title, body = self.notifications()[-1]
+        self.assertEqual(title, 'Windows: 1 missing, cards with notes')
+        self.assertTrue(body.startswith('ghostapp (no launcher)\n'), body)
+        self.assertIn('Cards in workspace-3.json were ignored: card 1 needs exactly two sides', body)
+        self.assertIn('Cards in workspace-3.json were ignored: card 1 needs exactly two sides', r.stderr)
+
     def test_a_cards_value_that_is_not_a_list_is_ignored_with_a_note(self):
         for bad in ({}, 'x', 7):
             with self.subTest(cards=bad):

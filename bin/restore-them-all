@@ -553,8 +553,14 @@ summary=$(msg "%1 opened, %2 already there" "$opened" "$skipped")
 extra=""
 ((${#card_notes[@]})) && extra=$(printf '\n%s' "${card_notes[@]}")
 if ((${#missing[@]})); then
-  notify "$(msg "Windows: %1 missing" "${#missing[@]}")" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')$extra"
+  if ((${#card_notes[@]})); then
+    title=$(msg "Windows: %1 missing, cards with notes" "${#missing[@]}")
+  else
+    title=$(msg "Windows: %1 missing" "${#missing[@]}")
+  fi
+  notify "$title" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')$extra"
   msg "%1; missing: %2" "$summary" "${missing[*]}" >&2
+  ((${#card_notes[@]} == 0)) || printf '%s\n' "${card_notes[@]}" >&2
   exit 1
 fi
 echo "$summary"
