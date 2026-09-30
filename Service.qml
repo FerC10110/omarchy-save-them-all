@@ -393,9 +393,20 @@ Scope {
     onExited: if (root.settingsQueued) root.writeSettings()
   }
 
+  // The session's runtime directory, made before the names file is watched:
+  // a FileView whose directory is missing never sees the file appear, and
+  // at login nothing makes it until restore-them-all-at-login runs.
+  property bool runtimeReady: false
+  Process {
+    id: runtimeMake
+    command: ["mkdir", "-p", "-m", "700", root.runtimeDir]
+    onExited: root.runtimeReady = true
+  }
+
   // Card names of this Hyprland session, written by bin/cards.
   FileView {
-    path: root.runtimeDir && root.instance ? root.runtimeDir + "/cards-" + root.instance + ".json" : ""
+    path: root.runtimeReady && root.runtimeDir && root.instance
+      ? root.runtimeDir + "/cards-" + root.instance + ".json" : ""
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
@@ -485,5 +496,8 @@ Scope {
   // place to bring marked layouts back. The script decides whether this is the
   // first start of the session; it runs detached so a shell reload halfway
   // through does not stop it.
-  Component.onCompleted: Quickshell.execDetached([binDir + "/restore-them-all-at-login"])
+  Component.onCompleted: {
+    if (runtimeDir) runtimeMake.running = true
+    Quickshell.execDetached([binDir + "/restore-them-all-at-login"])
+  }
 }

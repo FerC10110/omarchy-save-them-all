@@ -81,6 +81,53 @@ class RestoreCardsTest(ScriptTest):
                    and not x.startswith('hl.dsp.focus(')]   # giving focus back is fine; moving/resizing is not
         self.assertEqual(touched, [])
 
+    def built_card_on_the_right(self, windows, live):
+        """The card (0x2 front, 0x3 back, showing its back) is already built
+        where it was saved, on the right; `live` are the other windows."""
+        self.write_saved(3, windows, cards=[dict(CARD, visible=1)])
+        card = [client('0x2', 'org.gnome.Calculator', at=(960, 0), size=(960, 1080),
+                       hidden=True, grouped=['0x2', '0x3']),
+                client('0x3', 'obsidian', at=(960, 0), size=(960, 1080), grouped=['0x2', '0x3'])]
+        self.hypr_state(plugins=['hyprflip'], hyprflip=flip([__import__('scripttest').container(
+            1, [['0x2'], ['0x3']], active=1)]), clients=live + card)
+
+    def test_windows_go_back_around_a_card_already_built(self):
+        # With the card still built, a window saved to its left comes back
+        # to its left: it is put in next to the card, never wherever dwindle
+        # happens to open it. The card is not moved, and the side it hides
+        # is never focused (that would flip it).
+        self.built_card_on_the_right(WINDOWS, [client('0x1', 'kitty', at=(960, 0), size=(960, 1080))])
+        r = self.run_script('restore-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        d = self.dispatches()
+        self.assertIn(PARK % '0x1', d)
+        back = d.index("hl.dsp.window.move({ window = 'address:0x1', workspace = '3', follow = false })")
+        self.assertEqual(d[back - 2:back], ["hl.dsp.focus({ window = 'address:0x3' })",
+                                             "hl.dsp.layout('preselect l')"])
+        self.assertFalse([x for x in d if "'address:0x2'" in x or
+                          ("'address:0x3'" in x and not x.startswith('hl.dsp.focus('))], d)
+        self.assertEqual(self.helper_requests(), [])
+
+    def test_each_window_takes_its_side_of_a_card_already_built(self):
+        # kitty on the left; on the right, foot above the card. Both are put
+        # in next to the card: kitty to its left first, then foot above it.
+        windows = [saved_window('kitty', (0, 0), (960, 1080), TERMINAL),
+                   saved_window('org.gnome.Calculator', (960, 540), (960, 540), CALC),
+                   saved_window('obsidian', (960, 540), (960, 540), OBSIDIAN),
+                   saved_window('foot', (960, 0), (960, 540), TERMINAL)]
+        self.built_card_on_the_right(windows, [client('0x1', 'kitty', at=(0, 0), size=(640, 1080)),
+                                               client('0x4', 'foot', at=(640, 0), size=(640, 1080))])
+        r = self.run_script('restore-them-all')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        d = self.dispatches()
+        moves = [(d[i - 2], d[i - 1], x) for i, x in enumerate(d)
+                 if x.endswith("workspace = '3', follow = false })")]
+        self.assertEqual(moves, [
+            ("hl.dsp.focus({ window = 'address:0x3' })", "hl.dsp.layout('preselect l')",
+             "hl.dsp.window.move({ window = 'address:0x1', workspace = '3', follow = false })"),
+            ("hl.dsp.focus({ window = 'address:0x3' })", "hl.dsp.layout('preselect u')",
+             "hl.dsp.window.move({ window = 'address:0x4', workspace = '3', follow = false })")])
+
     def test_two_windows_of_one_class_in_a_card_do_not_swap(self):
         # Both kitties of the card share its place; Hyprland lists windows in
         # an order that changes (focus raises a floating one). Between two

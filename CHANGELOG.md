@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- Card names show in the panel from the start of a session. The service
+  watched the names file before its directory existed and never saw it
+  appear, so names only showed after the shell reloaded.
+- Restoring a workspace whose card is still built puts the other windows back
+  around the card, where they were saved, instead of wherever Hyprland opened
+  them (a window saved left of the card could come back on its right).
+- Opening **Pick on screen** no longer logs a TypeError.
 - A Hyprflip helper that hangs, or cannot start, no longer leaves the panel
   busy until the shell reloads: the action is stopped after a while, and says
   so.

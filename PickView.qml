@@ -26,13 +26,17 @@ Item {
   // each refresh, hover state included.
   property var rects: []
   property string rectsKey: ""
+  // The shell makes the overlay, this view included, before it hands the
+  // overlay its service: until then there is nothing to outline.
   function refreshRects() {
+    if (!service) return
     var next = Pick.rects(service.clients, workspace, origin)
     var key = JSON.stringify(next)
     if (key === rectsKey) return
     rectsKey = key
     rects = next
   }
+  onServiceChanged: refreshRects()
   onWorkspaceChanged: refreshRects()
   onOriginChanged: refreshRects()
   Component.onCompleted: refreshRects()

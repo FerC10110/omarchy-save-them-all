@@ -279,7 +279,10 @@ unpark() { # $1 address, [$2 neighbour address, $3 side]
 # insertion plan: the seed window first, then each window next to one already placed.
 # A vertical cut (line x=c) leaves windows side by side -> preselect r;
 # a horizontal cut (line y=c) leaves them stacked -> preselect d.
-build_plan() { # $1: [{i, x, y, w, h}]
+# A rect with "fixed" (a card already built, which stays where it is) is
+# placed already: it takes the seed's role, and a window that goes left of
+# or above it is put in with preselect l or u.
+build_plan() { # $1: [{i, x, y, w, h, fixed?}]
   python3 - "$1" <<'PY'
 import json, sys
 rects = json.loads(sys.argv[1])
@@ -302,17 +305,32 @@ def split(rs):
 def seed(n):
     return n[1] if n[0] == "leaf" else seed(n[1])
 
+def leaves(n):
+    return [n[1]] if n[0] == "leaf" else leaves(n[1]) + leaves(n[2])
+
+# Each cut splits the place of the window already in its part (anchor):
+# the other part's seed goes in next to it, then each part fills itself in.
+BEFORE = {"r": "l", "d": "u"}
 steps = []
-def realize(n):
+def realize(n, anchor):
     if n[0] == "leaf":
         return
-    steps.append({"op": "insert", "i": seed(n[2]), "next_to": seed(n[1]), "dir": n[0]})
-    realize(n[1])
-    realize(n[2])
+    cut, first, second = n
+    if anchor in leaves(first):
+        steps.append({"op": "insert", "i": seed(second), "next_to": anchor, "dir": cut})
+        realize(first, anchor)
+        realize(second, seed(second))
+    else:
+        steps.append({"op": "insert", "i": seed(first), "next_to": anchor, "dir": BEFORE[cut]})
+        realize(second, anchor)
+        realize(first, seed(first))
 
 root = split(rects)
-steps.append({"op": "seed", "i": seed(root)})
-realize(root)
+fixed = [r["i"] for r in rects if r.get("fixed")]
+anchor = fixed[0] if fixed else seed(root)
+if not fixed:
+    steps.append({"op": "seed", "i": anchor})
+realize(root, anchor)
 print(json.dumps(steps))
 PY
 }
@@ -457,15 +475,25 @@ for i in "${!slot[@]}"; do
     dispatch "hl.dsp.window.float({ window = 'address:${addrs[$i]}', action = 'disable' })"
   fi
 done
+# A card already built keeps its place and is never parked, so the other
+# windows are put back around it: its slot joins the tree as a fixed place.
+# Only one can anchor the tree; any other built card stays out of it.
 tiled='[]'
+fixed=false
 for i in "${!entries[@]}"; do
   [[ -n ${addrs[$i]:-} ]] || continue
   [[ -n ${hidden[$i]:-} ]] && continue
-  is_grouped "${addrs[$i]}" && continue
+  pin=false
+  if is_grouped "${addrs[$i]}"; then
+    [[ -n ${slot[$i]:-} && $fixed == false ]] || continue
+    clients_on_ws | jq -e --arg a "${addrs[$i]}" 'any(.[]; .address == $a and .floating == false)' >/dev/null || continue
+    pin=true
+    fixed=true
+  fi
   [[ $(jq -r .floating <<<"${entries[$i]}") == true && -z ${slot[$i]:-} ]] && continue
   read -r x y w h < <(rect_of "$i")
   tiled=$(jq -c --argjson i "$i" --argjson x "$x" --argjson y "$y" --argjson w "$w" --argjson h "$h" \
-    '. + [{i: $i, x: $x, y: $y, w: $w, h: $h}]' <<<"$tiled")
+    --argjson pin "$pin" '. + [{i: $i, x: $x, y: $y, w: $w, h: $h} + (if $pin then {fixed: true} else {} end)]' <<<"$tiled")
 done
 
 if (( $(jq length <<<"$tiled") > 1 )); then
@@ -490,7 +518,8 @@ if (( $(jq length <<<"$tiled") > 1 )); then
   while IFS= read -r step; do
     i=$(jq -r .i <<<"$step")
     if [[ $(jq -r .op <<<"$step") == insert ]]; then
-      unpark "${addrs[$i]}" "${addrs[$(jq -r .next_to <<<"$step")]}" "$(jq -r .dir <<<"$step")"
+      # Next to a built card: its shown window, as focusing a hidden one flips it.
+      unpark "${addrs[$i]}" "$(shown_of "${addrs[$(jq -r .next_to <<<"$step")]}")" "$(jq -r .dir <<<"$step")"
     else
       unpark "${addrs[$i]}"
     fi
