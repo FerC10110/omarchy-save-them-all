@@ -1,9 +1,9 @@
 # Save Them All
 
 Save the window layout of a Hyprland workspace and bring it back exactly: the
-same apps, the same splits, the same sizes.
+same apps, the same splits, the same sizes, and the same flip cards.
 
-![The Save Them All panel](preview.png)
+![Restore them all on a shuffled workspace: every window goes back to its place and the card of Files and btop is built again](docs/images/restore.gif)
 
 Omarchy restores your session, not your arrangement. You reopen the browser,
 the terminal and three chart webapps, then spend a minute dragging them back
@@ -23,15 +23,40 @@ omarchy plugin add https://github.com/FerC10110/omarchy-save-them-all.git --enab
 The bar gains a 󱂬 button on the right. It stays dim until the workspace you
 are on has a saved layout.
 
+## The panel
+
+Click the button to open the panel. It has three tabs: **Workspace**, **Cards**
+and **Settings**. `1`, `2` and `3` jump to a tab, `h` and `l` (or the arrow
+keys) step between them, and `Escape` closes the panel.
+
+<table>
+  <tr>
+    <td><img src="docs/images/workspace-tab.png" alt="The Workspace tab: three windows and one card saved, the Save and Restore buttons, and a Restore at login switch for each saved workspace" width="260"></td>
+    <td><img src="docs/images/cards-tab.png" alt="The Cards tab: every card on every workspace, with Flip, Edit, Dismantle and New card" width="260"></td>
+    <td><img src="docs/images/settings.png" alt="The Settings tab: language, card appearance, space between apps and animation speed" width="260"></td>
+  </tr>
+  <tr>
+    <td align="center">Workspace</td>
+    <td align="center">Cards</td>
+    <td align="center">Settings</td>
+  </tr>
+</table>
+
+Everything in the panel works from the keyboard as well as the mouse. The
+Cards tab and the card builder list their keys at the bottom.
+
 ## Usage
 
-Click the button to open the panel:
+The **Workspace** tab shows what is saved for the workspace you are on: how
+many windows and cards, when, and which apps.
 
-- **Save them all** (`s`) records every window on the current workspace.
-- **Restore them all** (`r`) reopens whatever is missing and rebuilds the layout.
+- **Save them all** (`s`) records every window on the current workspace, and
+  its cards.
+- **Restore them all** (`r`) reopens whatever is missing, rebuilds the layout
+  and builds the cards again.
 
 Middle-clicking the bar button saves without opening the panel, which is the
-action you repeat most. `Escape` closes the panel.
+action you repeat most.
 
 Each workspace keeps its own layout, so workspace 1 and workspace 2 can hold
 different arrangements and never overwrite each other.
@@ -42,9 +67,10 @@ instead of duplicating what is there.
 
 ### Restore at login
 
-The bottom of the panel lists every workspace with a saved layout, each with its
-own switch. They all start off. Turn one on and that workspace comes back by
-itself the next time you log in, without opening the panel or running anything.
+Below the buttons, the Workspace tab lists every workspace with a saved layout,
+each with its own switch. They all start off. Turn one on and that workspace
+comes back by itself the next time you log in, without opening the panel or
+running anything.
 
 With several switches on, workspaces are restored in order. Rebuilding a layout
 means focusing its windows, so you will see the workspaces go by while it works;
@@ -53,6 +79,102 @@ it finishes on the workspace you started on.
 It runs once per session. Restarting the shell, or the plugin reloading, does not
 restore again and does not reshuffle windows you have moved since. Saving a
 workspace again keeps its switch as it was.
+
+### Cards
+
+A card is a group of windows on two sides, **Front** and **Back**, that share
+one place in the layout and flip in it: two sets of apps where there is room
+for one. Each side holds up to five windows, in a row or a column.
+
+![A card flipping from Files to btop and back](docs/images/flip.gif)
+
+Cards need [Hyprflip](https://github.com/nocstah/hyprflip), a Hyprland plugin,
+and its helper. Without them everything else works as before, and the Cards
+tab says what is missing and the command that fixes it.
+
+#### The Cards tab
+
+Every card on every workspace, grouped by workspace with the one you are on
+first. Each shows its name, the apps on each side (the side on show in bold)
+and whether it is tiled or floating.
+
+- `v` or `Enter` flips the card chosen, `e` edits it, `d` takes it apart (its
+  windows stay open), `u` unfolds it to show both sides at once, `t` floats or
+  tiles it, and `n` makes a new one.
+- A key that does not apply to the card chosen is greyed out in the hints:
+  `u` needs a card of several apps, and `t` needs a Hyprflip with floating
+  cards.
+
+#### The builder
+
+![The card builder: Chromium on the Front, YouTube and Files on the Back, and the workspace's windows with live thumbnails on the right](docs/images/card-builder.png)
+
+**New card** (`n`) opens the builder. The card is on the left, Front above and
+Back below, shaped like the place it will take; the windows are on the right,
+with live thumbnails, the current workspace's first.
+
+- Drag a window onto a side, or walk the list with `j`/`k` and press `f`
+  (Front) or `r` (Back). `x` takes one out.
+- **Row** and **Column** set how each side lays out its windows.
+- Windows that cannot join say why, like one that is already in a card.
+  Two windows of the same app are told apart by where they are on screen
+  (*left top*, *right bottom*).
+- Windows from another workspace move to the card's when it is made, and the
+  builder says so before you create it.
+- The name is optional; without one, the card is named after its apps. It is
+  saved with the workspace.
+
+**Edit** (`e` in the Cards tab) opens the same builder on an existing card. A
+side you leave alone keeps its proportions, and changing only the name just
+renames the card.
+
+#### Pick on screen
+
+![Pick on screen: the whole monitor tinted, each window labelled with the side it joins, and a hint bar at the bottom](docs/images/pick-on-screen.jpg)
+
+**Pick on screen** (`e` in the builder) covers the monitor so you can click the
+windows themselves. Each one picked is labelled with its side, `Tab` switches
+the side you are adding to, `Enter` goes back to the builder with them and
+`Esc` goes back without changes. It stays on the monitor and workspace where it
+opened, and cancels if that workspace changes or the monitor is unplugged.
+
+#### Hyprflip's settings and shortcuts
+
+<img src="docs/images/shortcuts.png" alt="Hyprflip's keyboard shortcuts in the panel: Flip the card, Create a card, Edit the card, Card library and more" width="300">
+
+With Hyprflip loaded, **Settings** also holds its preferences: the card's
+appearance (classic tab bars or a card frame), the space between the apps of a
+card, the animation (flip, vertical, slide, fade or instant) and its speed. A
+speed set by hand in Hyprflip's config shows as *Custom*. Under them, a line
+says which Hyprflip is loaded and whether all is well; `Enter` checks again.
+
+**Keyboard shortcuts** lists Hyprflip's own, with conflicts called out.
+Editing one is keyboard-driven: `Enter` starts recording, then saves the chord
+just captured; `d` brings back the default; `Esc` cancels, the recording first,
+then the row. Hyprland's own shortcuts stand aside only while a new one is
+being recorded.
+
+#### Saving and restoring cards
+
+**Save them all** saves the workspace's cards too, and **Restore them all**
+builds them again after the windows, once it has switched back to the saved
+workspace; if that workspace will not stay focused, cards are skipped with a
+note and every window is left visible rather than hidden. A card that is
+already built is left alone and the other windows go back around it, and a
+window already in another card or group is never touched. If Hyprflip is not there, or its helper cannot build whole
+cards — too old, missing support for grouping windows, or a card with more
+windows on one side than it can hold — each card comes back instead as a
+native Hyprland group with tabs, the side that was on show in front, with a
+note saying why.
+
+If Hyprflip stops loading while cards are built (after a Hyprland update, for
+instance), the Workspace tab says **Cards paused** and offers **Show both
+faces**, which takes every window on the workspace out of its group.
+
+### Language
+
+Settings → Language: Automatic (the system language), English or Español. The
+notifications follow it too.
 
 ### Close the browser cleanly
 
@@ -82,10 +204,13 @@ Chromium keeps its whole session when it is asked to quit as a whole, which is
 what **⋮ → Exit** does. It then comes back with every tab on the next start, and
 the plugin only has to open the webapps, which Chromium never restores itself.
 
-**What the switch does.** **Close the browser cleanly**, under *Leaving the
-session*, makes Logout, Reboot and Shutdown in the Omarchy menu do that first:
-they ask the browser to quit, wait up to ten seconds for it to finish saving, and
-then run Omarchy's own command, which finds no browser windows left to close.
+<img src="docs/images/settings-session.png" alt="The bottom of the Settings tab: keyboard shortcuts, Hyprflip's status, and the Close the browser cleanly switch under Leaving the session" width="300">
+
+**What the switch does.** **Close the browser cleanly**, at the bottom of
+Settings under *Leaving the session*, makes Logout, Reboot and Shutdown in the
+Omarchy menu do that first: they ask the browser to quit, wait up to ten
+seconds for it to finish saving, and then run Omarchy's own command, which
+finds no browser windows left to close.
 
 To get there it adds these lines to
 `~/.config/omarchy/extensions/omarchy-menu.jsonc`, the file Omarchy gives you for
@@ -158,52 +283,6 @@ Entries in the Omarchy menu, in `~/.config/omarchy/extensions/omarchy-menu.jsonc
 "windows.restore": {"icon":"󰑓","label":"Restore them all","action":"restore-them-all"},
 ```
 
-### Cards
-
-Cards need Hyprflip, a Hyprland plugin, and its helper. Without them
-everything else works as before, and the Cards tab says what is missing and
-the command that fixes it.
-
-- **Cards tab**: every card on every workspace. `v` or `Enter` flips the one
-  chosen, `e` edits it, `d` takes it apart (its windows stay open), `u`
-  unfolds it, `t` floats or tiles it, and `n` makes a new one.
-- **The builder**: the card on the left, Front above and Back below, shaped
-  like the place it will take; the windows on the right, this workspace's
-  first. Drag a window onto a side, or walk the list with `j`/`k` and press
-  `f` (Front) or `r` (Back); `x` takes one out. A side holds up to five
-  windows, in a row or a column. Windows from another workspace move to the
-  card's when it is made.
-- **Pick on screen** (`e` in the builder) covers the monitor: click windows to
-  add them to the active side, `Tab` switches side, `Enter` goes back with
-  them. It stays on the monitor and workspace where it opened, and cancels if
-  that workspace changes while it is up.
-- **Settings** also gets Hyprflip's own preferences (appearance, spacing
-  between apps, animation) and its keyboard shortcuts, with conflicts called
-  out. Editing a shortcut is keyboard-driven: `Enter` starts recording, then
-  saves the chord just captured; `d` brings back the default; `Esc` cancels —
-  the recording first, then the row. Hyprland's own shortcuts stand aside only
-  while a new one is being recorded.
-
-**Save them all** saves the workspace's cards too, and **Restore them all**
-builds them again after the windows, once it has switched back to the saved
-workspace; if that workspace will not stay focused, cards are skipped with a
-note and every window is left visible rather than hidden. A card that is
-already built is left alone, and a window already in another card or group is
-never touched. If Hyprflip is not there, or its helper cannot build whole
-cards — too old, missing support for grouping windows, or a card with more
-windows on one side than it can hold — each card comes back instead as a
-native Hyprland group with tabs, the side that was on show in front, with a
-note saying why.
-
-If Hyprflip stops loading while cards are built (after a Hyprland update, for
-instance), the Workspace tab says **Cards paused** and offers **Show both
-faces**, which takes every window on the workspace out of its group.
-
-### Language
-
-Settings → Language: Automatic (the system language), English or Español. The
-notifications follow it too.
-
 ## How it works
 
 `save-them-all` walks the windows of the active workspace, sorted left to right
@@ -241,8 +320,8 @@ first and given time to finish restoring its own last session. Only then does
 the script count what is still missing, so it does not launch a window the
 browser was about to bring back.
 
-The login restore is started by the panel when the shell loads it, and runs
-detached from the shell. Before doing anything it claims a marker named after
+The login restore is started by the plugin's service when the shell loads it,
+and runs detached from the shell. Before doing anything it claims a marker named after
 the Hyprland instance in `$XDG_RUNTIME_DIR/save-them-all/`. That directory is
 private to your user and emptied when the session ends, so the marker means
 "this session has been restored" and nothing more.
@@ -276,6 +355,23 @@ window, or write a layout from scratch and restore it:
   {"class": "mpv", "launch": {"kind": "app", "desktop": "mpv.desktop"}, "at": [100, 100], "size": [800, 450], "floating": true}
 ]}
 ```
+
+Cards go in the same file, in an optional `cards` block. Each card lists its
+two sides by their windows' positions in `windows`, with the axis and the
+proportions of each side, the side on show, where a floating card was, and its
+name:
+
+```json
+"cards": [
+  {"name": "Work", "visible": 0, "floating": null, "faces": [
+    {"windows": [1], "axis": "row", "ratios": [1.0]},
+    {"windows": [2], "axis": "row", "ratios": [1.0]}
+  ]}
+]
+```
+
+Restoring builds them through Hyprflip's helper once every window is in its
+place, and without Hyprflip turns each one into a native group with tabs.
 
 A state file never holds a command, and nothing in it is ever run as one.
 `launch` picks one of the four launchers above and gives it, at most, a URL or
@@ -352,8 +448,9 @@ nothing, and restoring falls back to native groups.
 - **A tiled card lands where Hyprflip puts it.** The plugin gives it an axis,
   an order and proportions; Hyprflip decides its exact place in the layout. A
   floating card keeps the position and size it was saved with.
-- **Hyprflip's own messages are in Spanish.** Its helper writes them; the rest
-  of the panel follows the Language setting.
+- **Hyprflip's helper speaks Spanish.** In English the panel translates the
+  messages it knows; one it does not (a new or reworded one) shows as the
+  helper wrote it.
 
 ## Remove
 
