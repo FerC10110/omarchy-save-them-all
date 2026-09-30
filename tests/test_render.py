@@ -215,6 +215,7 @@ class ServiceTest(unittest.TestCase):
                        XDG_CONFIG_HOME=str(root / 'config'), XDG_CACHE_HOME=str(root / 'cache'),
                        HOME=str(root), SAVE_THEM_ALL_STATE=str(root / 'state'),
                        SAVE_THEM_ALL_RUNTIME=str(root / 'runtime' / 'save-them-all'),
+                       HYPRLAND_INSTANCE_SIGNATURE='render',
                        SAVE_THEM_ALL_HYPRFLIP_HELPER=str(root / 'control.py'),
                        RENDER_HELPER_DIR=str(helper), FAKE_HYPR_STATE=str(hypr),
                        QT_QPA_PLATFORM='offscreen', QT_QPA_PLATFORMTHEME='', QT_QUICK_BACKEND='software',
@@ -399,3 +400,72 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(r['history'], ['es', 'en', 'es', 'en'])
         self.assertEqual(r['file'].get('language'), 'en')
         self.assertEqual(r['now'], 'en')
+
+    def test_names_reach_the_service_when_the_runtime_directory_comes_later(self):
+        self.assertEqual(self.result('names-file')['names'], {'1': 'Named later'})
+
+
+LATE_SERVICE_SHELL = r'''import QtQuick
+import Quickshell
+import "SaveThemAll" as SaveThemAll
+ShellRoot {
+  QtObject {
+    id: service
+    property var clients: [{ address: "0x1", class: "kitty", at: [0, 0], size: [800, 600], floating: false,
+                             hidden: false, mapped: true, workspace: { id: 3 } }]
+    property var byAddress: ({})
+    property int focusedWorkspace: 3
+    property var pickDraft: ({ faces: [[], []] })
+    property int pickFace: 0
+    property bool picking: true
+    property string builderNotice: ""
+    property var flip: ({ snapshot: { cards: [], capabilities: {} } })
+    function appName(win) { return win.class }
+    function t(text) { return text }
+  }
+  QtObject {
+    id: host
+    property var service: null
+    property color foreground: "white"
+    property color dim: "grey"
+    property color urgent: "red"
+    property color accent: "orange"
+    property string fontFamily: "monospace"
+    function t(text) { return text }
+  }
+  Component.onCompleted: {
+    var view = Qt.createComponent("SaveThemAll/PickView.qml").createObject(null, { host: host })
+    host.service = service
+    console.log("LATE_SERVICE_RECTS " + view.rects.length)
+    Qt.callLater(Qt.quit)
+  }
+}
+'''
+
+
+@unittest.skipUnless(QUICKSHELL and SHELL.is_dir(), 'needs quickshell and the Omarchy shell')
+class PickOverlayTest(unittest.TestCase):
+    def test_the_view_waits_for_a_service_given_after_it_is_made(self):
+        # The shell makes the overlay (and its PickView) first and hands it
+        # the service afterwards: nothing may be read from a missing service,
+        # and the windows are outlined once it arrives.
+        with tempfile.TemporaryDirectory(prefix='save-them-all-pick-') as directory:
+            root = Path(directory)
+            for name in ('Ui', 'Commons'):
+                (root / name).symlink_to(SHELL / name)
+            plugin = root / 'SaveThemAll'
+            plugin.mkdir()
+            for source in [*ROOT.glob('*.qml'), *ROOT.glob('*.js')]:
+                shutil.copy2(source, plugin / source.name)
+            (root / 'shell.qml').write_text(LATE_SERVICE_SHELL)
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ('WAYLAND_DISPLAY', 'DISPLAY', 'HYPRLAND_INSTANCE_SIGNATURE')}
+            env.update(QT_QPA_PLATFORM='offscreen', QT_QPA_PLATFORMTHEME='', QT_QUICK_BACKEND='software',
+                       XDG_RUNTIME_DIR=str(root))
+            done = subprocess.run([QUICKSHELL, '-p', str(root), '--no-color'], env=env,
+                                  capture_output=True, text=True, timeout=60)
+        log = done.stdout + done.stderr
+        problems = [line for line in log.splitlines()
+                    if any(p in line for p in PROBLEMS) and not any(a in line for a in ALLOWED)]
+        self.assertEqual(problems, [], log)
+        self.assertIn('LATE_SERVICE_RECTS 1', log)

@@ -515,6 +515,18 @@ ShellRoot {
       { read: harness.stateDir + "/settings.json", into: "file" },
       { log: function(c) { return { history: harness.languages, file: JSON.parse(c.file || "{}"), now: service.languageSetting } } },
     ] },
+
+    // The session's runtime directory did not exist when the service
+    // started (at login, restore-them-all-at-login makes it a moment later):
+    // names bin/cards writes there afterwards still reach the service.
+    { name: "names-file", steps: [
+      { sh: "python3 -c \"import json, os, tempfile; d = os.environ['SAVE_THEM_ALL_RUNTIME']; " +
+            "os.makedirs(d, mode=0o700, exist_ok=True); fd, t = tempfile.mkstemp(dir=d); " +
+            "os.write(fd, json.dumps({'1': 'Named later'}).encode()); os.close(fd); " +
+            "os.replace(t, d + '/cards-' + os.environ['HYPRLAND_INSTANCE_SIGNATURE'] + '.json')\"" },
+      { until: function(c) { return service.names["1"] === "Named later" }, ms: 3000 },
+      { log: function(c) { return { names: service.names } } },
+    ] },
   ]
 
   property int scenario: -1
