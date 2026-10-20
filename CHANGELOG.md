@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Restoring on another layout.** A workspace that tiles with Omarchy's
+  scrolling layout (or master) was left with every window on the hidden
+  workspace: the tree is rebuilt with dwindle's `preselect`, which those
+  layouts refuse, and the script died there, in silence. On a layout other
+  than dwindle, restoring now reopens the missing windows, places the floating
+  ones and leaves the tiles where the layout puts them, and the notification
+  says so.
+- **A restore that dies halfway** (a dispatch Hyprland refuses, a signal)
+  brings every window it had parked back to the workspace, as plain tiles, and
+  says where it stopped in the notification, on stderr and in `restore.log`.
+- A window saved floating but tiled when restoring was parked with the other
+  tiles and never came back. It comes back after the others, and floats.
+
 ## 2.0.0
 
 ### Added

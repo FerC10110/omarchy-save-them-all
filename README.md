@@ -315,6 +315,14 @@ window floats.
 Floating windows skip all of that and are placed directly, and windows that were
 open but never saved come back to the right of the last one.
 
+That tree is dwindle's. On a workspace that tiles with another layout
+(Omarchy's scrolling layout, or master) there is no `preselect` to rebuild it
+with, so `restore-them-all` reopens the missing windows and places the floating
+ones, leaves the tiles where the layout puts them, and says so in its
+notification. If a restore dies halfway with windows still parked (a dispatch
+Hyprland refuses, a signal), they are brought back to the workspace as plain
+tiles, and the notification, stderr and `restore.log` say where it stopped.
+
 When the browser is not running yet, as right after logging in, it is started
 first and given time to finish restoring its own last session. Only then does
 the script count what is still missing, so it does not launch a window the
@@ -408,7 +416,8 @@ omarchy bar move io.github.ferc10110.save-them-all --section left
 
 ## Requirements
 
-Omarchy 4 with Hyprland 0.56 or newer, on the dwindle layout. It leans on
+Omarchy 4 with Hyprland 0.56 or newer, on the dwindle layout (see Limitations
+for the others). It leans on
 `hyprctl`'s Lua dispatchers, which replaced the old string syntax in 0.56, and
 on `jq`, `python3` and `pstree`, all of which ship with Omarchy.
 
@@ -419,8 +428,10 @@ nothing, and restoring falls back to native groups.
 
 ## Limitations
 
-- **Dwindle only.** The tree reconstruction is guillotine cuts; master and
-  scrolling layouts are not handled.
+- **The arrangement is dwindle's.** The tree reconstruction is guillotine cuts,
+  put in with dwindle's `preselect`. On a workspace that tiles with the
+  scrolling or master layout, restoring reopens the windows and places the
+  floating ones, but leaves the tiles where that layout puts them.
 - **One monitor's workspace at a time.** A layout belongs to a workspace id, and
   restoring targets whichever workspace is active.
 - **Login restore needs the plugin enabled.** Its service is what starts it,
