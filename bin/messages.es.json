@@ -66,5 +66,11 @@
   "The name was not saved: %1": "El nombre no se guardó: %1",
   "Card %1 was not saved: a side has more than 5 windows": "La tarjeta %1 no se guardó: una cara tiene más de 5 ventanas",
   "Card %1 was not saved: one of its windows is already in another card": "La tarjeta %1 no se guardó: una de sus ventanas ya está en otra tarjeta",
-  "Windows: %1 missing, cards with notes": "Ventanas: faltan %1, tarjetas con avisos"
+  "Windows: %1 missing, cards with notes": "Ventanas: faltan %1, tarjetas con avisos",
+  "The arrangement was not rebuilt: workspace %1 is on the %2 layout, not dwindle": "No se rearmó la disposición: el escritorio %1 está en el layout %2 y no en dwindle",
+  "Windows reopened on workspace %1, not rearranged": "Ventanas reabiertas en el escritorio %1, sin reordenar",
+  "Restoring workspace %1 was cut short": "Restaurar el escritorio %1 quedó a medias",
+  "Stopped at: %1": "Se detuvo en: %1",
+  "%1 of %2 windows were brought back from the hidden workspace": "%1 de %2 ventanas volvieron del escritorio oculto",
+  "See %1": "Mirá %1"
 }

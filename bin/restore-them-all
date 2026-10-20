@@ -1,11 +1,13 @@
 #!/bin/bash
 
 # restore-them-all: reopen on the active workspace the windows saved by
-# save-them-all, rebuild the dwindle tree and restore the geometry.
+# save-them-all, rebuild the dwindle tree and restore the geometry. On a
+# workspace that tiles with another layout (scrolling, master) the tiles are
+# left as they are: the missing windows are reopened and floating ones placed.
 #
 # Usage: restore-them-all [--quiet] [--workspace N]
 
-set -euo pipefail
+set -Eeuo pipefail   # -E: the ERR trap below fires inside functions too
 
 BIN_DIR=$(dirname "$(readlink -f "$0")")
 # shellcheck source=lib/i18n.sh
@@ -24,6 +26,8 @@ Usage: restore-them-all [--quiet] [--workspace N]
 Reopens the windows saved by save-them-all for the active Hyprland workspace,
 rebuilds the dwindle split tree and restores each window's size and position.
 Windows that are already open are reused instead of being launched twice.
+On a workspace that tiles with another layout (scrolling, master) the tiles are
+left as they are: only the missing windows are reopened and floating ones placed.
 
 Options:
   --workspace N   Switch to workspace N first and restore that one.
@@ -52,8 +56,17 @@ notify() {
   omarchy-notification-send -g 󱂬 "$1" "${2:-}" >/dev/null 2>&1 || true
 }
 
+# The last dispatch Hyprland refused, for the notice when that ends the restore.
+last_error=""
 dispatch() {
-  hyprctl dispatch "$1" >/dev/null
+  local reply
+  if reply=$(hyprctl dispatch "$1" 2>&1); then
+    last_error=""
+    return 0
+  fi
+  last_error="hyprctl dispatch $1: ${reply:-no answer}"
+  echo "restore-them-all: $last_error" >&2
+  return 1
 }
 
 # One line in restore.log, timestamped like bin/cards' own note() log: what
@@ -94,6 +107,11 @@ if [[ ! -f $file ]]; then
   exit 1
 fi
 active_before=$(hyprctl -j activewindow | jq -r '.address // empty')
+
+# The layout the workspace tiles with. Only dwindle has the preselect the tree
+# is rebuilt with; on any other (scrolling, master) the tiles are left as they
+# are. A Hyprland that does not say (no tiledLayout) is taken to be on dwindle.
+layout=$(hyprctl -j activeworkspace | jq -r '.tiledLayout // "dwindle"')
 
 clients_on_ws() {
   hyprctl -j clients | jq -c --argjson ws "$ws" '[.[] | select(.workspace.id == $ws and .mapped)]'
@@ -261,18 +279,51 @@ place_floating() { # $1 address, $2 w, $3 h, $4 x, $5 y  (verified order: float,
   dispatch "hl.dsp.window.move({ window = 'address:$1', x = $4, y = $5, exact = true })"
 }
 
+# The windows parked right now, by address: what the rescue below puts back.
+declare -A parked=()
+
 park() { # $1 address -> to the hidden workspace
   dispatch "hl.dsp.window.move({ window = 'address:$1', workspace = '$PARKING', follow = false })"
+  parked[$1]=1
 }
 
-# Put a window back on the workspace. With $2/$3 it lands next to another window ($3 = r|d).
+# Put a window back on the workspace. With $2/$3 it lands next to another window ($3 = r|d|l|u).
 unpark() { # $1 address, [$2 neighbour address, $3 side]
   if [[ -n ${2:-} ]]; then
     dispatch "hl.dsp.focus({ window = 'address:$2' })"
     dispatch "hl.dsp.layout('preselect $3')"
   fi
   dispatch "hl.dsp.window.move({ window = 'address:$1', workspace = '$ws', follow = false })"
+  unset 'parked[$1]'
   sleep 0.25
+}
+
+# Nothing stays hidden. If the restore dies with windows parked -- a dispatch
+# Hyprland refuses (preselect on a layout that has none), a signal -- they go
+# back to the workspace as plain tiles, and the notification, stderr and
+# restore.log say where it stopped. A deliberate exit (a missing window, a bad
+# file) has its own notice and no parked window, so it never comes through
+# here. At an ERR, BASH_COMMAND is the failing command; for a dispatch that is
+# its own `return 1`, so the reply Hyprland gave (last_error) is kept instead.
+dying=""
+died_at=""
+trap 'dying=1; [[ $BASH_COMMAND == return* ]] || died_at=$BASH_COMMAND' ERR
+for sig in HUP INT TERM; do trap "dying=1; died_at=SIG$sig; exit 143" "$sig"; done
+trap 'rescue $?' EXIT
+
+rescue() { # $1 exit status
+  local status=$1 a back=0 total=${#parked[@]} title what
+  [[ $status != 0 && ( -n $dying || $total -gt 0 ) ]] || return 0
+  for a in "${!parked[@]}"; do
+    hyprctl dispatch "hl.dsp.window.move({ window = 'address:$a', workspace = '${ws:-}', follow = false })" \
+      >/dev/null 2>&1 && ((++back)) || true
+  done
+  title=$(msg "Restoring workspace %1 was cut short" "${ws:-?}")
+  what=$(msg "Stopped at: %1" "${died_at:-${last_error:-exit status $status}}")
+  ((total == 0)) || what+=$'\n'$(msg "%1 of %2 windows were brought back from the hidden workspace" "$back" "$total")
+  log_line "$title. ${what//$'\n'/. }"
+  notify "$title" "$what"$'\n'"$(msg "See %1" "$LOG")"
+  printf '%s\n%s\n' "$title" "$what" >&2
 }
 
 # Derive the guillotine split tree from the saved rectangles and return the
@@ -465,72 +516,86 @@ rect_of() { # $1 index -> "x y w h": its card's place for a slot, its own otherw
 }
 
 # ---------- 2. Rebuild the dwindle tree ----------
-# A card floats or not as a whole: a slot takes its card's place in the
-# tree even when its own window was saved floating (a hand-edited file), so
-# it is tiled first, the way bin/cards tiles a card's windows to group them.
-for i in "${!slot[@]}"; do
-  [[ -n ${addrs[$i]:-} ]] || continue
-  is_grouped "${addrs[$i]}" && continue
-  if clients_on_ws | jq -e --arg a "${addrs[$i]}" 'any(.[]; .address == $a and .floating == true)' >/dev/null; then
-    dispatch "hl.dsp.window.float({ window = 'address:${addrs[$i]}', action = 'disable' })"
-  fi
-done
-# A card already built keeps its place and is never parked, so the other
-# windows are put back around it: its slot joins the tree as a fixed place.
-# Only one can anchor the tree; any other built card stays out of it.
-tiled='[]'
-fixed=false
-for i in "${!entries[@]}"; do
-  [[ -n ${addrs[$i]:-} ]] || continue
-  [[ -n ${hidden[$i]:-} ]] && continue
-  pin=false
-  if is_grouped "${addrs[$i]}"; then
-    [[ -n ${slot[$i]:-} && $fixed == false ]] || continue
-    clients_on_ws | jq -e --arg a "${addrs[$i]}" 'any(.[]; .address == $a and .floating == false)' >/dev/null || continue
-    pin=true
-    fixed=true
-  fi
-  [[ $(jq -r .floating <<<"${entries[$i]}") == true && -z ${slot[$i]:-} ]] && continue
-  read -r x y w h < <(rect_of "$i")
-  tiled=$(jq -c --argjson i "$i" --argjson x "$x" --argjson y "$y" --argjson w "$w" --argjson h "$h" \
-    --argjson pin "$pin" '. + [{i: $i, x: $x, y: $y, w: $w, h: $h} + (if $pin then {fixed: true} else {} end)]' <<<"$tiled")
-done
-
-if (( $(jq length <<<"$tiled") > 1 )); then
-  plan=$(build_plan "$tiled")
-  managed=$(printf '%s\n' "${addrs[@]}")
-  extras=()
-  later=()
-  # Park every tiled window on the workspace, including the ones that were not
-  # saved; never one that is already in a card or group.
-  while IFS=$'\t' read -r a fl; do
-    [[ $fl == true ]] && continue
-    is_grouped "$a" && continue
-    if grep -qx -- "$a" <<<"$hidden_addrs"; then
-      later+=("$a")
-    elif ! grep -qx -- "$a" <<<"$managed"; then
-      extras+=("$a")
+layout_note=""
+if [[ $layout != dwindle ]]; then
+  # Another layout has no preselect to rebuild a tree with, and its own idea
+  # of where tiles go: they are left as they are, and the notice says so.
+  echo "workspace $ws tiles with the $layout layout: the tiles are left as they are"
+  layout_note=$(msg "The arrangement was not rebuilt: workspace %1 is on the %2 layout, not dwindle" "$ws" "$layout")
+else
+  # A card floats or not as a whole: a slot takes its card's place in the
+  # tree even when its own window was saved floating (a hand-edited file), so
+  # it is tiled first, the way bin/cards tiles a card's windows to group them.
+  for i in "${!slot[@]}"; do
+    [[ -n ${addrs[$i]:-} ]] || continue
+    is_grouped "${addrs[$i]}" && continue
+    if clients_on_ws | jq -e --arg a "${addrs[$i]}" 'any(.[]; .address == $a and .floating == true)' >/dev/null; then
+      dispatch "hl.dsp.window.float({ window = 'address:${addrs[$i]}', action = 'disable' })"
     fi
-    park "$a"
-  done < <(clients_on_ws | jq -r '.[] | [.address, (.floating|tostring)] | @tsv')
-  sleep 0.3
-  last=""
-  while IFS= read -r step; do
-    i=$(jq -r .i <<<"$step")
-    if [[ $(jq -r .op <<<"$step") == insert ]]; then
-      # Next to a built card: its shown window, as focusing a hidden one flips it.
-      unpark "${addrs[$i]}" "$(shown_of "${addrs[$(jq -r .next_to <<<"$step")]}")" "$(jq -r .dir <<<"$step")"
-    else
-      unpark "${addrs[$i]}"
-    fi
-    last=${addrs[$i]}
-  done < <(jq -c '.[]' <<<"$plan")
-  # Unsaved windows come back last, to the right of the last one; then the
-  # windows that wait for their card, so a card that cannot be built hides nothing.
-  for a in "${extras[@]}" "${later[@]}"; do
-    unpark "$a" "$last" r
-    last=$a
   done
+  # A card already built keeps its place and is never parked, so the other
+  # windows are put back around it: its slot joins the tree as a fixed place.
+  # Only one can anchor the tree; any other built card stays out of it.
+  tiled='[]'
+  fixed=false
+  for i in "${!entries[@]}"; do
+    [[ -n ${addrs[$i]:-} ]] || continue
+    [[ -n ${hidden[$i]:-} ]] && continue
+    pin=false
+    if is_grouped "${addrs[$i]}"; then
+      [[ -n ${slot[$i]:-} && $fixed == false ]] || continue
+      clients_on_ws | jq -e --arg a "${addrs[$i]}" 'any(.[]; .address == $a and .floating == false)' >/dev/null || continue
+      pin=true
+      fixed=true
+    fi
+    [[ $(jq -r .floating <<<"${entries[$i]}") == true && -z ${slot[$i]:-} ]] && continue
+    read -r x y w h < <(rect_of "$i")
+    tiled=$(jq -c --argjson i "$i" --argjson x "$x" --argjson y "$y" --argjson w "$w" --argjson h "$h" \
+      --argjson pin "$pin" '. + [{i: $i, x: $x, y: $y, w: $w, h: $h} + (if $pin then {fixed: true} else {} end)]' <<<"$tiled")
+  done
+
+  if (( $(jq length <<<"$tiled") > 1 )); then
+    plan=$(build_plan "$tiled")
+    managed=$(printf '%s\n' "${addrs[@]}")
+    extras=()
+    later=()
+    # Park every tiled window on the workspace, including the ones that were not
+    # saved; never one that is already in a card or group.
+    while IFS=$'\t' read -r a fl; do
+      [[ $fl == true ]] && continue
+      is_grouped "$a" && continue
+      if grep -qx -- "$a" <<<"$hidden_addrs"; then
+        later+=("$a")
+      elif ! grep -qx -- "$a" <<<"$managed"; then
+        extras+=("$a")
+      fi
+      park "$a"
+    done < <(clients_on_ws | jq -r '.[] | [.address, (.floating|tostring)] | @tsv')
+    sleep 0.3
+    last=""
+    while IFS= read -r step; do
+      i=$(jq -r .i <<<"$step")
+      if [[ $(jq -r .op <<<"$step") == insert ]]; then
+        # Next to a built card: its shown window, as focusing a hidden one flips it.
+        unpark "${addrs[$i]}" "$(shown_of "${addrs[$(jq -r .next_to <<<"$step")]}")" "$(jq -r .dir <<<"$step")"
+      else
+        unpark "${addrs[$i]}"
+      fi
+      last=${addrs[$i]}
+    done < <(jq -c '.[]' <<<"$plan")
+    # Unsaved windows come back last, to the right of the last one; then the
+    # windows that wait for their card, so a card that cannot be built hides nothing.
+    for a in "${extras[@]}" "${later[@]}"; do
+      unpark "$a" "$last" r
+      last=$a
+    done
+    # Whatever the plan had no place for (a window saved floating but tiled
+    # now) comes back too, after the others: nothing stays parked.
+    for a in "${!parked[@]}"; do
+      unpark "$a" "$last" r
+      last=$a
+    done
+  fi
 fi
 
 # ---------- 3. Cards ----------
@@ -570,7 +635,7 @@ for i in "${!entries[@]}"; do
   [[ -n ${slot[$i]:-} ]] && target=$(shown_of "$target")
   if [[ $fl == true && -z ${slot[$i]:-} ]]; then
     place_floating "$target" "$w" "$h" "$x" "$y"
-  else
+  elif [[ $layout == dwindle ]]; then   # another layout sizes its own tiles
     fit "$target" x "$w"
     fit "$target" y "$h"
   fi
@@ -591,8 +656,11 @@ if [[ -n $active_before ]] && ! grep -qx -- "$active_before" <<<"$off_side" \
 fi
 
 summary=$(msg "%1 opened, %2 already there" "$opened" "$skipped")
+notes=()
+[[ -z $layout_note ]] || notes+=("$layout_note")
+notes+=("${card_notes[@]}")
 extra=""
-((${#card_notes[@]})) && extra=$(printf '\n%s' "${card_notes[@]}")
+((${#notes[@]})) && extra=$(printf '\n%s' "${notes[@]}")
 if ((${#missing[@]})); then
   if ((${#card_notes[@]})); then
     title=$(msg "Windows: %1 missing, cards with notes" "${#missing[@]}")
@@ -601,14 +669,17 @@ if ((${#missing[@]})); then
   fi
   notify "$title" "$(printf '%s, ' "${missing[@]}" | sed 's/, $//')$extra"
   msg "%1; missing: %2" "$summary" "${missing[*]}" >&2
-  ((${#card_notes[@]} == 0)) || printf '%s\n' "${card_notes[@]}" >&2
+  ((${#notes[@]} == 0)) || printf '%s\n' "${notes[@]}" >&2
   exit 1
 fi
 echo "$summary"
-if ((${#card_notes[@]})); then
-  # Card notes are news even when the caller asked for quiet.
+# Notes are news even when the caller asked for quiet: an arrangement that is
+# not coming back, or a card that was not rebuilt.
+if [[ -n $layout_note ]]; then
+  notify "$(msg "Windows reopened on workspace %1, not rearranged" "$ws")" "$summary$extra"
+elif ((${#card_notes[@]})); then
   notify "$(msg "Windows restored on workspace %1, cards with notes" "$ws")" "$summary$extra"
-  printf '%s\n' "${card_notes[@]}" >&2
 else
   ((QUIET)) || notify "$(msg "Windows restored on workspace %1" "$ws")" "$summary"
 fi
+((${#notes[@]} == 0)) || printf '%s\n' "${notes[@]}" >&2

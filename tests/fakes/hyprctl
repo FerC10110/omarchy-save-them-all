@@ -22,6 +22,26 @@ if state.get('down'):
 ADDR = r"address:(0x[0-9a-f]+)"
 
 
+class Refused(Exception):
+    """A dispatch Hyprland answers with an error line and exit status 7."""
+
+
+def layout_of(wid):
+    """The tiled layout of a workspace: state['layouts'] maps ids (as
+    strings) to layout names; dwindle unless told otherwise."""
+    return (state.get('layouts') or {}).get(str(wid), 'dwindle')
+
+
+def workspace_json(wid, **extra):
+    """One workspace as `hyprctl -j workspaces` or `activeworkspace` lists
+    it. layout_field false leaves tiledLayout out, as a Hyprland without
+    per-workspace layouts would."""
+    value = {'id': wid, 'name': str(wid), **extra}
+    if state.get('layout_field', True):
+        value['tiledLayout'] = layout_of(wid)
+    return value
+
+
 def save():
     tmp = path + '.tmp'
     with open(tmp, 'w') as f:
@@ -57,6 +77,10 @@ def apply(expr):
     elif m := re.fullmatch(r"hl\.dsp\.focus\(\{ window = '" + ADDR + r"' \}\)", expr):
         state['active'] = m[1]
     elif re.fullmatch(r"hl\.dsp\.layout\('preselect [rdlu]'\)", expr):
+        # preselect belongs to dwindle: any other layout refuses it, as Hyprland does.
+        layout = layout_of(state.get('active_workspace', 1))
+        if layout != 'dwindle':
+            raise Refused(f'error: =[C]:-1: no such layoutmsg for {layout}')
         state['anchor'] = active
     elif m := re.fullmatch(r"hl\.dsp\.window\.move\(\{ window = '" + ADDR + r"', workspace = '([^']+)', follow = false \}\)", expr):
         target = m[2]
@@ -113,12 +137,12 @@ ws = state.get('active_workspace', 1)
 if command == 'clients':
     answer(state['clients'])
 if command == 'activeworkspace':
-    answer({'id': ws, 'name': str(ws), 'monitor': state.get('monitor', 'DP-1')})
+    answer(workspace_json(ws, monitor=state.get('monitor', 'DP-1')))
 if command == 'activewindow':
     answer(clients.get(state.get('active'), {}))
 if command == 'workspaces':
     ids = sorted({c['workspace']['id'] for c in state['clients']} | {ws})
-    answer([{'id': i, 'name': str(i), 'tiledLayout': 'dwindle'} for i in ids])
+    answer([workspace_json(i) for i in ids])
 if command == 'plugin list':
     answer([{'name': n, 'version': '0.3.0', 'description': ''} for n in state.get('plugins', [])])
 if command == 'version':
@@ -152,7 +176,12 @@ if args[:1] == ['dispatch'] and len(args) == 2:
         save()
         print('error: fake failure')
         sys.exit(1)
-    apply(expr)
+    try:
+        apply(expr)
+    except Refused as refusal:
+        save()
+        print(refusal)
+        sys.exit(7)
     # drift: {"after": N, "to": W} -- once N dispatches have gone through,
     # the active workspace silently changes to W, one time only. Simulates a
     # window's own rule (or the user) stealing focus mid-restore, without
