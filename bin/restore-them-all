@@ -57,16 +57,19 @@ notify() {
 }
 
 # The last dispatch Hyprland refused, for the notice when that ends the restore.
+# A refused dispatch fails with hyprctl's own exit status (7 for a dispatcher
+# error), which is then the script's.
 last_error=""
 dispatch() {
-  local reply
-  if reply=$(hyprctl dispatch "$1" 2>&1); then
+  local reply status=0
+  reply=$(hyprctl dispatch "$1" 2>&1) || status=$?
+  if ((status == 0)); then
     last_error=""
     return 0
   fi
   last_error="hyprctl dispatch $1: ${reply:-no answer}"
   echo "restore-them-all: $last_error" >&2
-  return 1
+  return "$status"
 }
 
 # One line in restore.log, timestamped like bin/cards' own note() log: what
@@ -111,7 +114,7 @@ active_before=$(hyprctl -j activewindow | jq -r '.address // empty')
 # The layout the workspace tiles with. Only dwindle has the preselect the tree
 # is rebuilt with; on any other (scrolling, master) the tiles are left as they
 # are. A Hyprland that does not say (no tiledLayout) is taken to be on dwindle.
-layout=$(hyprctl -j activeworkspace | jq -r '.tiledLayout // "dwindle"')
+layout=$(hyprctl -j activeworkspace | jq -r '(.tiledLayout // "") | if . == "" then "dwindle" else . end')
 
 clients_on_ws() {
   hyprctl -j clients | jq -c --argjson ws "$ws" '[.[] | select(.workspace.id == $ws and .mapped)]'
@@ -298,6 +301,13 @@ unpark() { # $1 address, [$2 neighbour address, $3 side]
   sleep 0.25
 }
 
+# The windows on the hidden workspace right now, one address per line: what
+# this run parked, what bin/cards was moving, what an earlier run left there.
+stranded() {
+  hyprctl -j clients 2>/dev/null | jq -r --arg p "$PARKING" '.[] | select(.workspace.name == $p) | .address' \
+    2>/dev/null || true
+}
+
 # Nothing stays hidden. If the restore dies with windows parked -- a dispatch
 # Hyprland refuses (preselect on a layout that has none), a signal -- they go
 # back to the workspace as plain tiles, and the notification, stderr and
@@ -308,17 +318,24 @@ unpark() { # $1 address, [$2 neighbour address, $3 side]
 dying=""
 died_at=""
 trap 'dying=1; [[ $BASH_COMMAND == return* ]] || died_at=$BASH_COMMAND' ERR
-for sig in HUP INT TERM; do trap "dying=1; died_at=SIG$sig; exit 143" "$sig"; done
+trap 'dying=1; died_at=SIGHUP; exit 129' HUP
+trap 'dying=1; died_at=SIGINT; exit 130' INT
+trap 'dying=1; died_at=SIGTERM; exit 143' TERM
 trap 'rescue $?' EXIT
 
 rescue() { # $1 exit status
-  local status=$1 a back=0 total=${#parked[@]} title what
-  [[ $status != 0 && ( -n $dying || $total -gt 0 ) ]] || return 0
+  local status=$1 a back=0 total title what
+  trap '' HUP INT TERM   # a second signal must not cut the rescue short
+  [[ $status != 0 && ( -n $dying || ${#parked[@]} -gt 0 ) ]] || return 0
+  # Not only this run's own list: a window bin/cards was moving through the
+  # hidden workspace when the signal came is there too.
+  while IFS= read -r a; do [[ -n $a ]] && parked[$a]=1; done < <(stranded)
+  total=${#parked[@]}
   for a in "${!parked[@]}"; do
-    hyprctl dispatch "hl.dsp.window.move({ window = 'address:$a', workspace = '${ws:-}', follow = false })" \
+    hyprctl dispatch "hl.dsp.window.move({ window = 'address:$a', workspace = '$ws', follow = false })" \
       >/dev/null 2>&1 && ((++back)) || true
   done
-  title=$(msg "Restoring workspace %1 was cut short" "${ws:-?}")
+  title=$(msg "Restoring workspace %1 was cut short" "$ws")
   what=$(msg "Stopped at: %1" "${died_at:-${last_error:-exit status $status}}")
   ((total == 0)) || what+=$'\n'$(msg "%1 of %2 windows were brought back from the hidden workspace" "$back" "$total")
   log_line "$title. ${what//$'\n'/. }"
@@ -397,6 +414,22 @@ if ! windows=$(read_windows "$file" 2>&1); then
 fi
 entries=()
 [[ -z $windows ]] || mapfile -t entries <<<"$windows"
+
+# Whatever an earlier run left on the hidden workspace (a restore that died
+# before it could put them back) comes back first, so that it counts as open
+# below and is not launched a second time.
+leftover=0
+while IFS= read -r a; do
+  [[ -n $a ]] || continue
+  dispatch "hl.dsp.window.move({ window = 'address:$a', workspace = '$ws', follow = false })"
+  ((++leftover))
+done < <(stranded)
+sweep_note=""
+if ((leftover)); then
+  echo "brought back from $PARKING: $leftover windows an earlier restore left there"
+  sweep_note=$(msg "Windows an earlier restore had left hidden were brought back: %1" "$leftover")
+  sleep 0.3
+fi
 
 # A browser starting cold restores its own last session, and those windows
 # arrive in waves. Counting what is missing before it finishes would launch
@@ -658,6 +691,7 @@ fi
 summary=$(msg "%1 opened, %2 already there" "$opened" "$skipped")
 notes=()
 [[ -z $layout_note ]] || notes+=("$layout_note")
+[[ -z $sweep_note ]] || notes+=("$sweep_note")
 notes+=("${card_notes[@]}")
 extra=""
 ((${#notes[@]})) && extra=$(printf '\n%s' "${notes[@]}")
@@ -674,11 +708,13 @@ if ((${#missing[@]})); then
 fi
 echo "$summary"
 # Notes are news even when the caller asked for quiet: an arrangement that is
-# not coming back, or a card that was not rebuilt.
+# not coming back, a card that was not rebuilt, windows that were hidden.
 if [[ -n $layout_note ]]; then
-  notify "$(msg "Windows reopened on workspace %1, not rearranged" "$ws")" "$summary$extra"
+  notify "$(msg "Workspace %1 restored, not rearranged" "$ws")" "$summary$extra"
 elif ((${#card_notes[@]})); then
   notify "$(msg "Windows restored on workspace %1, cards with notes" "$ws")" "$summary$extra"
+elif ((${#notes[@]})); then
+  notify "$(msg "Windows restored on workspace %1" "$ws")" "$summary$extra"
 else
   ((QUIET)) || notify "$(msg "Windows restored on workspace %1" "$ws")" "$summary"
 fi

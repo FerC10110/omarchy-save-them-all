@@ -157,6 +157,12 @@ def active_workspace():
     return hypr_json('-j', 'activeworkspace')['id']
 
 
+def tiled_layout():
+    """The layout the active workspace tiles with; dwindle when Hyprland does
+    not say (no tiledLayout: before per-workspace layouts)."""
+    return hypr_json('-j', 'activeworkspace').get('tiledLayout') or 'dwindle'
+
+
 def border_size():
     """Hyprland's window border, in pixels; 0 when it cannot be read."""
     try:
@@ -832,9 +838,16 @@ def fallback_cards(filename, windows, cards, problem, addresses, notes=None):
         return result
     try:
         ws = active_workspace()
+        layout = tiled_layout()
     except HyprError as error:
         result['notes'].append(note(msg('Cards were not rebuilt: %1', error)))
         return result
+    # A group is built by putting each window next to the first with dwindle's
+    # preselect, which any other layout refuses: those cards are left unbuilt,
+    # with one note for all of them instead of one failure per card.
+    no_tabs = None
+    if layout != 'dwindle':
+        no_tabs = msg('Cards were not grouped as tabs: workspace %1 is on the %2 layout, not dwindle', ws, layout)
     for card in cards:
         title = saved_title(card, windows)
         try:
@@ -859,6 +872,10 @@ def fallback_cards(filename, windows, cards, problem, addresses, notes=None):
             if busy:
                 result['notes'].append(note(msg('Card %1 was left as it is: %2 is already in a card or group',
                                                 title, app_name(now[busy].get('class')))))
+                continue
+            if no_tabs:
+                if no_tabs not in result['notes']:
+                    result['notes'].append(note(no_tabs))
                 continue
             build_group(card, faces, ws, now)
             result['built'] += 1

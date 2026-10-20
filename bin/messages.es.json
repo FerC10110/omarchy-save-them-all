@@ -68,9 +68,11 @@
   "Card %1 was not saved: one of its windows is already in another card": "La tarjeta %1 no se guardó: una de sus ventanas ya está en otra tarjeta",
   "Windows: %1 missing, cards with notes": "Ventanas: faltan %1, tarjetas con avisos",
   "The arrangement was not rebuilt: workspace %1 is on the %2 layout, not dwindle": "No se rearmó la disposición: el escritorio %1 está en el layout %2 y no en dwindle",
-  "Windows reopened on workspace %1, not rearranged": "Ventanas reabiertas en el escritorio %1, sin reordenar",
   "Restoring workspace %1 was cut short": "Restaurar el escritorio %1 quedó a medias",
   "Stopped at: %1": "Se detuvo en: %1",
   "%1 of %2 windows were brought back from the hidden workspace": "%1 de %2 ventanas volvieron del escritorio oculto",
-  "See %1": "Mirá %1"
+  "See %1": "Mirá %1",
+  "Cards were not grouped as tabs: workspace %1 is on the %2 layout, not dwindle": "Las tarjetas no se agruparon como pestañas: el escritorio %1 está en el layout %2 y no en dwindle",
+  "Windows an earlier restore had left hidden were brought back: %1": "Volvieron ventanas que una restauración anterior había dejado ocultas: %1",
+  "Workspace %1 restored, not rearranged": "Escritorio %1 restaurado, sin reordenar"
 }

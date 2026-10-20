@@ -77,9 +77,10 @@ def apply(expr):
     elif m := re.fullmatch(r"hl\.dsp\.focus\(\{ window = '" + ADDR + r"' \}\)", expr):
         state['active'] = m[1]
     elif re.fullmatch(r"hl\.dsp\.layout\('preselect [rdlu]'\)", expr):
-        # preselect belongs to dwindle: any other layout refuses it, as Hyprland does.
+        # preselect belongs to dwindle: any other layout refuses it, as Hyprland
+        # does (an empty name is no layout: dwindle).
         layout = layout_of(state.get('active_workspace', 1))
-        if layout != 'dwindle':
+        if layout and layout != 'dwindle':
             raise Refused(f'error: =[C]:-1: no such layoutmsg for {layout}')
         state['anchor'] = active
     elif m := re.fullmatch(r"hl\.dsp\.window\.move\(\{ window = '" + ADDR + r"', workspace = '([^']+)', follow = false \}\)", expr):

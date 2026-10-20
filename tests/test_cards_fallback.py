@@ -51,6 +51,15 @@ class FallbackTest(ScriptTest):
         self.assertEqual(d[:2], ["hl.dsp.focus({ window = 'address:0x2' })", 'hl.dsp.group.toggle()'])
         self.assertEqual(d.count("hl.dsp.window.move({ into_group = 'l' })"), 2)
 
+    def test_on_another_layout_nothing_is_grouped_and_one_note_says_why(self):
+        # A group is built with preselect, which scrolling and master refuse:
+        # no window is parked or grouped, and one note covers every card.
+        out = self.fallback([card([1], [2]), card([0], [3])], layouts={'3': 'scrolling'})
+        self.assertEqual(out, {'built': 0, 'kept': 0, 'notes': [
+            'Cards were not grouped as tabs: workspace 3 is on the scrolling layout, not dwindle']})
+        self.assertEqual(self.dispatches(), [])
+        self.assertFalse([a for a, c in self.clients_by_address().items() if c['grouped']])
+
     def test_each_other_window_goes_through_the_parking_workspace_into_the_group(self):
         self.fallback([card([1], [2, 3])])
         park = "hl.dsp.window.move({ window = 'address:%s', workspace = 'special:savethemall', follow = false })"
