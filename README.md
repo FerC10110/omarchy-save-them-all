@@ -319,9 +319,16 @@ That tree is dwindle's. On a workspace that tiles with another layout
 (Omarchy's scrolling layout, or master) there is no `preselect` to rebuild it
 with, so `restore-them-all` reopens the missing windows and places the floating
 ones, leaves the tiles where the layout puts them, and says so in its
-notification. If a restore dies halfway with windows still parked (a dispatch
-Hyprland refuses, a signal), they are brought back to the workspace as plain
-tiles, and the notification, stderr and `restore.log` say where it stopped.
+notification. Without Hyprflip, cards are grouped as tabs with that same
+`preselect`, so on another layout they are left unbuilt, with one note; with
+Hyprflip, rebuilding them is up to Hyprflip.
+
+Nothing stays on the hidden workspace. If a restore dies halfway with windows
+still parked (a dispatch Hyprland refuses, a signal), everything there is
+brought back to the workspace as plain tiles, and the notification, stderr and
+`restore.log` say where it stopped. Whatever an earlier run left there is
+brought back before anything else, so those windows count as open and are not
+launched again.
 
 When the browser is not running yet, as right after logging in, it is started
 first and given time to finish restoring its own last session. Only then does

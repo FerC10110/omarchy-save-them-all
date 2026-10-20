@@ -10,10 +10,15 @@
   layouts refuse, and the script died there, in silence. On a layout other
   than dwindle, restoring now reopens the missing windows, places the floating
   ones and leaves the tiles where the layout puts them, and the notification
-  says so.
+  says so. Without Hyprflip, the cards (grouped as tabs with that same
+  `preselect`) are left unbuilt there, with one note instead of one failure
+  per card.
 - **A restore that dies halfway** (a dispatch Hyprland refuses, a signal)
-  brings every window it had parked back to the workspace, as plain tiles, and
-  says where it stopped in the notification, on stderr and in `restore.log`.
+  brings every window on the hidden workspace back to the workspace, as plain
+  tiles, and says where it stopped in the notification, on stderr and in
+  `restore.log`. Windows an earlier run left there are brought back at the
+  start of the next restore, before counting what is missing, so they are not
+  launched a second time.
 - A window saved floating but tiled when restoring was parked with the other
   tiles and never came back. It comes back after the others, and floats.
 
